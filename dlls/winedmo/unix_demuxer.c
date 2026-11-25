@@ -41,6 +41,8 @@ struct stream
     BOOL vc1_asf_startcode_fallback;
     INT64 timestamp_base;
     BOOL timestamp_base_set;
+    INT64 timestamp_base_candidate;
+    BOOL timestamp_base_candidate_set;
     INT64 last_pts;
     INT64 next_pts;
     INT64 final_last_pts;
@@ -171,6 +173,26 @@ static INT64 get_asf_header_duration( AVFormatContext *ctx )
     return AV_NOPTS_VALUE;
 }
 
+enum asf_timestamp_base_mode
+{
+    ASF_TIMESTAMP_BASE_AUTO = 0,
+    ASF_TIMESTAMP_BASE_FIRST,
+    ASF_TIMESTAMP_BASE_LEGACY,
+};
+
+static enum asf_timestamp_base_mode get_asf_timestamp_base_mode( void )
+{
+    const char *env = getenv( "WINE_DMO_ASF_TIMESTAMP_BASE" );
+
+    if (!env || !*env || !strcmp( env, "auto" ))
+        return ASF_TIMESTAMP_BASE_AUTO;
+    if (!strcmp( env, "first" ) || !strcmp( env, "lock" ) || !strcmp( env, "1" ))
+        return ASF_TIMESTAMP_BASE_FIRST;
+    if (!strcmp( env, "legacy" ) || !strcmp( env, "off" ) || !strcmp( env, "0" ))
+        return ASF_TIMESTAMP_BASE_LEGACY;
+    return ASF_TIMESTAMP_BASE_AUTO;
+}
+
 static void normalize_stream_timestamps( struct stream *stream, struct sample *sample )
 {
     INT64 base = INT64_MIN;
@@ -184,18 +206,48 @@ static void normalize_stream_timestamps( struct stream *stream, struct sample *s
         else if (sample->dts != AV_NOPTS_VALUE)
             base = sample->dts;
 
-        /* Some ASF streams expose the first compressed sample with a large positive
-         * timestamp even though the clip itself starts at zero. Preserve normal
-         * small startup offsets, but rebase obviously late first samples so MF does
-         * not hold video for the first second or more of the clip. */
-        if (base != INT64_MIN && base > 2000000)
+        /* Some ASF streams expose the first compressed sample (or a large
+         * post-preroll jump) with a positive timestamp > 200 ms even though the
+         * clip starts at zero, while normal zero-start streams step smoothly
+         * across the 200 ms threshold. In auto mode, lock timestamp_base to 0 on
+         * small-step crossings so P-frame decoders never flush on backward jumps,
+         * while still rebasing > 200 ms initial offsets or > 200 ms single-step
+         * startup jumps. WINE_DMO_ASF_TIMESTAMP_BASE overrides with auto/first/legacy. */
+        if (base != INT64_MIN)
         {
-            stream->timestamp_base = base;
-            stream->timestamp_base_set = TRUE;
+            enum asf_timestamp_base_mode mode = get_asf_timestamp_base_mode();
+
+            if (mode == ASF_TIMESTAMP_BASE_LEGACY)
+            {
+                if (base > 2000000)
+                {
+                    stream->timestamp_base = base;
+                    stream->timestamp_base_set = TRUE;
+                }
+            }
+            else if (mode == ASF_TIMESTAMP_BASE_FIRST)
+            {
+                stream->timestamp_base = base > 2000000 ? base : 0;
+                stream->timestamp_base_set = TRUE;
+            }
+            else if (base > 2000000)
+            {
+                if (!stream->timestamp_base_candidate_set
+                        || stream->timestamp_base_candidate < base - 2000000)
+                    stream->timestamp_base = base;
+                else
+                    stream->timestamp_base = 0;
+                stream->timestamp_base_set = TRUE;
+            }
+            else
+            {
+                stream->timestamp_base_candidate = base;
+                stream->timestamp_base_candidate_set = TRUE;
+            }
         }
     }
 
-    if (!stream->timestamp_base_set)
+    if (!stream->timestamp_base_set || !stream->timestamp_base)
         return;
 
     if (sample->pts != AV_NOPTS_VALUE)
@@ -1121,6 +1173,8 @@ done:
         demuxer->streams[i].eos = FALSE;
         demuxer->streams[i].timestamp_base = 0;
         demuxer->streams[i].timestamp_base_set = FALSE;
+        demuxer->streams[i].timestamp_base_candidate = 0;
+        demuxer->streams[i].timestamp_base_candidate_set = FALSE;
         demuxer->streams[i].last_pts = INT64_MIN;
         demuxer->streams[i].next_pts = INT64_MIN;
         demuxer->streams[i].final_last_pts = INT64_MIN;
