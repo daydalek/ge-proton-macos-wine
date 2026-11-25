@@ -1,3 +1,4 @@
+/* GE macOS Wine PoC modification notice: 2026-11-24; GE media integration and macOS adaptations. Original copyright and license retained. See MODIFICATIONS.json. */
 /* WMA Decoder DMO / MF Transform
  *
  * Copyright 2022 Rémi Bernon for CodeWeavers

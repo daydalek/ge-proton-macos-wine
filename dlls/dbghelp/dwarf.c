@@ -1,3 +1,4 @@
+/* GE macOS Wine PoC modification notice: 2026-11-24; GE media integration and macOS adaptations. Original copyright and license retained. See MODIFICATIONS.json. */
 /*
  * File dwarf.c - read dwarf2 information from the ELF modules
  *

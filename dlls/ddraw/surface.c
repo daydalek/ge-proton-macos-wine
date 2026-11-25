@@ -1,3 +1,4 @@
+/* GE macOS Wine PoC modification notice: 2026-11-24; GE media integration and macOS adaptations. Original copyright and license retained. See MODIFICATIONS.json. */
 /* DirectDraw Surface Implementation
  *
  * Copyright (c) 1997-2000 Marcus Meissner

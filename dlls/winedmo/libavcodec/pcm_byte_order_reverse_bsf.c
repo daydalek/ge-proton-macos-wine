@@ -1,3 +1,4 @@
+/* GE macOS Wine PoC modification notice: 2026-11-24; GE media integration and macOS adaptations. Original copyright and license retained. See MODIFICATIONS.json. */
 /*
  * PCM byte order reverse byte stream format filter
  * Copyright (c) 2025 Conor McCarthy for CodeWeavers

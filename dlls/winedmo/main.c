@@ -1,3 +1,4 @@
+/* GE macOS Wine PoC modification notice: 2026-11-24; GE media integration and macOS adaptations. Original copyright and license retained. See MODIFICATIONS.json. */
 /* winedmo/main.c — DirectShow and Media Foundation COM class factory and DLL entry points
  *
  * Copyright 2002 Lionel Ulmer

@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
+/* GE macOS Wine PoC modification notice: 2026-11-24; GE media integration and macOS adaptations. Original copyright and license retained. See MODIFICATIONS.json. */
 #import "cocoa_spatial.h"
 #include "wine_gdi_upscaler.h"
 #include "wine_gdi_frame_diff.h"

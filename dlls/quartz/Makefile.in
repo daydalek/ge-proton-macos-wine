@@ -1,3 +1,4 @@
+# GE macOS Wine PoC modification notice: 2026-11-24; GE media integration and macOS adaptations. Original copyright and license retained. See MODIFICATIONS.json.
 MODULE       = quartz.dll
 IMPORTLIB    = quartz
 IMPORTS      = strmiids dxguid strmbase dmoguids uuid dsound msacm32 msvfw32 ole32 oleaut32 rpcrt4 user32 gdi32 advapi32 winmm msvcrt

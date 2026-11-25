@@ -1,3 +1,4 @@
+/* GE macOS Wine PoC modification notice: 2026-11-24; GE media integration and macOS adaptations. Original copyright and license retained. See MODIFICATIONS.json. */
 /* Copyright 2005 Ulrich Czekalla
  *
  * This library is free software; you can redistribute it and/or

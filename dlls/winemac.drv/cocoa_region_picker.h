@@ -1,3 +1,4 @@
+/* GE macOS Wine PoC modification notice: 2026-11-24; GE media integration and macOS adaptations. Original copyright and license retained. See MODIFICATIONS.json. */
 /* SPDX-License-Identifier: LGPL-2.1-or-later
  * Included once by cocoa_upscaler.m. Selection uses the supplied GDI image;
  * all window interaction and profile writes run on the Cocoa main thread.

@@ -1,3 +1,4 @@
+/* GE macOS Wine PoC modification notice: 2026-11-24; GE media integration and macOS adaptations. Original copyright and license retained. See MODIFICATIONS.json. */
 /* SPDX-License-Identifier: LGPL-2.1-or-later
  * Included once by cocoa_opengl.m. GL resources belong to the producer context;
  * Cocoa presentation belongs to the main thread. Original swaps always execute. */

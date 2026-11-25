@@ -1,0 +1,1512 @@
+{
+  "project": "GE-Proton macOS Wine PoC",
+  "date": "2026-11-24",
+  "scope": "Files changed by the supplied GE and macOS patches",
+  "licenses": "Original per-file licenses and upstream LICENSE/COPYING/AUTHORS remain applicable",
+  "files": [
+    {
+      "file": ".gitignore",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "15102310a94504f6ca69af5d961d70bf6269c7f76c0f904ea0dab603e43181b4"
+    },
+    {
+      "file": "MAINTAINERS",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "e882f4b12537087bde80418310e183fcd788ba50b75eb2df65a6a2f3148bb94c"
+    },
+    {
+      "file": "configure",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "# Copyright (C) 1992-1996, 1998-2017, 2020-2023 Free Software Foundation,"
+      ],
+      "sha256": "7389ca249db491773773e723be1ca3eaf2879023961660d318cef2901a66523d"
+    },
+    {
+      "file": "configure.ac",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "06c18ec6e63ae48dbb79d8cf525406ae9bab58bb9e5634618d718266d11fd491"
+    },
+    {
+      "file": "dlls/amstream/ddrawstream.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2005, 2008, 2012 Christian Costa"
+      ],
+      "sha256": "855b30981f934c21e9dcaf49819e778ed7e3d7ce6852a9536f3b6c9726833e68"
+    },
+    {
+      "file": "dlls/dbghelp/dwarf.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright (C) 2005, Raphael Junqueira",
+        "Copyright (C) 2006-2011, Eric Pouech",
+        "Copyright (C) 2010, Alexandre Julliard"
+      ],
+      "sha256": "41081e18e72b0676a8b52f13de04c5751b6219129ba5c2cc986ae902128dfdb9"
+    },
+    {
+      "file": "dlls/ddraw/ddraw.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 1997-2000 Marcus Meissner",
+        "Copyright 1998-2000 Lionel Ulmer",
+        "Copyright 2000-2001 TransGaming Technologies Inc.",
+        "Copyright 2006 Stefan Dösinger",
+        "Copyright 2008 Denver Gingerich",
+        "Copyright 2007-2008, 2011, 2013 Stefan Dösinger for CodeWeavers"
+      ],
+      "sha256": "4cc6b34fdff25c09fa0c2091a856eedab96f21789fdb09c11e6ef242baad08cc"
+    },
+    {
+      "file": "dlls/ddraw/ddraw_private.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2006 Stefan Dösinger"
+      ],
+      "sha256": "0100acdb75f99bbb7662597c9e042c7d92041da8df69dc6d2fd33d441daa03a6"
+    },
+    {
+      "file": "dlls/ddraw/main.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 1997-1999 Marcus Meissner",
+        "Copyright 1998 Lionel Ulmer",
+        "Copyright 2000-2001 TransGaming Technologies Inc.",
+        "Copyright 2006 Stefan Dösinger",
+        "Copyright 2008 Denver Gingerich"
+      ],
+      "sha256": "f51933e7fd35dcbd588704d655f87331178323fa8018f28f1b2c6c41d40142dd"
+    },
+    {
+      "file": "dlls/ddraw/surface.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright (c) 1997-2000 Marcus Meissner",
+        "Copyright (c) 1998-2000 Lionel Ulmer",
+        "Copyright (c) 2000-2001 TransGaming Technologies Inc.",
+        "Copyright (c) 2006 Stefan Dösinger",
+        "Copyright (c) 2011 Ričardas Barkauskas for CodeWeavers"
+      ],
+      "sha256": "af1fd12241dea64df77cfa1320acbf98cb0bc7a97fcce91a3481346669b5a734"
+    },
+    {
+      "file": "dlls/dmime/audiopath.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright (C) 2003-2004 Rok Mandeljc"
+      ],
+      "sha256": "8ecdf9871162b5521c8e4765e6f49b58d7ce2257a9fd48ea5a4a878a09b84771"
+    },
+    {
+      "file": "dlls/dmime/dmime_private.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright (C) 2003-2004 Rok Mandeljc"
+      ],
+      "sha256": "81d69e5423fbcb2b2cdefc1e15290035b318e6572933c98a751d45d1e5f87508"
+    },
+    {
+      "file": "dlls/dmime/performance.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright (C) 2003-2004 Rok Mandeljc",
+        "Copyright (C) 2003-2004 Raphael Junqueira"
+      ],
+      "sha256": "e0bd589d519884e889c595fe15ea7100ad9905e751f0ddddc0136c53740c7127"
+    },
+    {
+      "file": "dlls/dmime/tests/dmime.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2012, 2014 Michael Stefaniuc"
+      ],
+      "sha256": "8f09d2e45c9dbe0ec98475a8fc871b3d5c5dd8f8db0164428b1980fe0cdbedcc"
+    },
+    {
+      "file": "dlls/dmsynth/synth.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright (C) 2003-2004 Rok Mandeljc",
+        "Copyright (C) 2012 Christian Costa",
+        "TRACE(\" - ulCopyrightIdx   = %lu\\n\", instrument->ulCopyrightIdx);",
+        "TRACE(\" - ulCopyrightIdx    = %lu\\n\", wave->ulCopyrightIdx);"
+      ],
+      "sha256": "1b00a6d51ff2a9aeca6036135bae88daa597efbc8afff5e099acd88eb74e9a46"
+    },
+    {
+      "file": "dlls/dmsynth/synthsink.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright (C) 2003-2004 Rok Mandeljc",
+        "Copyright (C) 2012 Christian Costa"
+      ],
+      "sha256": "24e136db7567372ab1cba11062757c477c0604dbb2807ca1f6aff49161f20d14"
+    },
+    {
+      "file": "dlls/dsound/buffer.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 1998 Marcus Meissner",
+        "Copyright 1998 Rob Riggs",
+        "Copyright 2000-2002 TransGaming Technologies, Inc."
+      ],
+      "sha256": "40d4535fe9f7bf76145efaa30beed127ceef7940c25b2b3f41209f5935ce3f01"
+    },
+    {
+      "file": "dlls/evr/evr.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2017 Fabian Maurer"
+      ],
+      "sha256": "1343ea12aea9b17d4c14841434359ebe4dd004f046a123e0b88c2b8ffe959789"
+    },
+    {
+      "file": "dlls/evr/mixer.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2020 Nikolay Sivov"
+      ],
+      "sha256": "55fcf53a5a670f7ad34990dc3d2b0901085fbfe6f4ae493a4de17c6c574a0bb2"
+    },
+    {
+      "file": "dlls/evr/presenter.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2020 Nikolay Sivov"
+      ],
+      "sha256": "1a1df4816b34487143a7deca19d30faa0fcb46479e4b871c0e76a47b3c5c2a9c"
+    },
+    {
+      "file": "dlls/evr/sample.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2020 Nikolay Sivov"
+      ],
+      "sha256": "19699ec21af348f95d2827f5469dea3b4b7602a0c7601f6bfb2fa536c5030ec9"
+    },
+    {
+      "file": "dlls/gdi32/text.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 1993 Alexandre Julliard",
+        "Copyright 1997 Alex Korobka",
+        "Copyright 2002,2003 Shachar Shemesh",
+        "Copyright 2007 Maarten Lankhorst",
+        "Copyright 2010 CodeWeavers, Aric Stewart",
+        "-- Copyright (C) 1999-2005, ASMUS, Inc.",
+        "to do so, provided that (a) the above copyright notice(s) and this",
+        "(b) both the above copyright notice(s) and this permission notice appear"
+      ],
+      "sha256": "108168b0c34be90fb31c15437ce942e05684758dde33f724d777566443618db0"
+    },
+    {
+      "file": "dlls/ir50_32/Makefile.in",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "4c8904a714c5f0827d2ff8a8cd2a59c6592112883c43922be78c3b652c9e301b"
+    },
+    {
+      "file": "dlls/ir50_32/ir50.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2023 Shaun Ren for CodeWeavers"
+      ],
+      "sha256": "0c225d7d3669814de70028d684b047b9b72a1ece7d547e6b8bd0d39467a2cf3a"
+    },
+    {
+      "file": "dlls/ir50_32/ir50_private.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2023 Shaun Ren for CodeWeavers"
+      ],
+      "sha256": "f265a18e024f137ecc38afcc7f2c2799350dc96586d83873b1737fec1917845a"
+    },
+    {
+      "file": "dlls/iyuv_32/Makefile.in",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "d01f88ec64f6f39a9ff31406b8d25af836f1e42538ad051ad2312fa946ac3840"
+    },
+    {
+      "file": "dlls/iyuv_32/iyuv.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2026 Brendan McGrath for CodeWeavers"
+      ],
+      "sha256": "b8d5ffd3e30b6471956fea2b18d2217925563a3af99236ee060f491635e5e605"
+    },
+    {
+      "file": "dlls/iyuv_32/iyuv_private.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2026 Brendan McGrath for CodeWeavers"
+      ],
+      "sha256": "7e9e508310a1697f6ee1ef73bf86270e4cde87422d9fa6d6e6f50c86393854e7"
+    },
+    {
+      "file": "dlls/kernelbase/file.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 1993 John Burton",
+        "Copyright 1996, 2004 Alexandre Julliard",
+        "Copyright 2008 Jeff Zaroyko"
+      ],
+      "sha256": "8fb37446ea48d17881f83135f5c5a28ef12558b4d11f86eeec5dea34ba148b08"
+    },
+    {
+      "file": "dlls/kernelbase/process.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 1996, 1998 Alexandre Julliard"
+      ],
+      "sha256": "dc0f1076e4809d7f171dcd57f98da345ea388de974aa6a4c4f8d76e2e4913842"
+    },
+    {
+      "file": "dlls/mf/Makefile.in",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "eab42cab4ee0a9bc371d13eb51da35eb01b0e20ec411d1653deb533727db0068"
+    },
+    {
+      "file": "dlls/mf/clock.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2017 Nikolay Sivov"
+      ],
+      "sha256": "161a7a001dc287497d47a9d3ecb0f601d678841d2bcc4d1c8c8de6aca1e14e2c"
+    },
+    {
+      "file": "dlls/mf/evr.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2020 Nikolay Sivov for CodeWeavers"
+      ],
+      "sha256": "fe9be7782231242c6e6310eca0659cf291ba06d8699d9cdd43cb39112d01cac2"
+    },
+    {
+      "file": "dlls/mf/main.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright (C) 2015 Austin English"
+      ],
+      "sha256": "0e3a1e9129c9effd87be54f09d70190bb19781145811069229f38ce20f761a58"
+    },
+    {
+      "file": "dlls/mf/mf_private.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2019 Nikolay Sivov for CodeWeavers"
+      ],
+      "sha256": "066463035d2be9f638d0d237fed484414d6bf79572c1c5f30ae624f075200e3d"
+    },
+    {
+      "file": "dlls/mf/samplegrabber.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2019 Nikolay Sivov for CodeWeavers"
+      ],
+      "sha256": "efd8f65f02d86d9dda45888d55832bd1d7f96b2bf99e474931949b2c9529ab2b"
+    },
+    {
+      "file": "dlls/mf/scheme_handler.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2022 Nikolay Sivov for CodeWeavers"
+      ],
+      "sha256": "37fd4a298aeccd41572d8ffcbf2035a1f89047d11d86030e1975f9535f929415"
+    },
+    {
+      "file": "dlls/mf/session.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2017 Nikolay Sivov"
+      ],
+      "sha256": "2b2625830aaf878c17fc22f5fdd29d84afdd2b67e5c1eeb69b10885b6545f7c0"
+    },
+    {
+      "file": "dlls/mf/tests/mf.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2017 Nikolay Sivov"
+      ],
+      "sha256": "848e70df209f1d239d9d92cd7e10c13fc23de7de8ada7e7f860835e26fef2afa"
+    },
+    {
+      "file": "dlls/mf/tests/transform.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2017 Nikolay Sivov",
+        "Copyright 2022 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "54b9d7bb5c6a897b5ce990f3ea2f3ebe8647c3e5a8bd95b2cc3029a471370036"
+    },
+    {
+      "file": "dlls/mf/topology.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2017 Nikolay Sivov"
+      ],
+      "sha256": "722306fe65729252c8c1fa5e339f8ee488d76f3b4aadf85421f7cfdf9372e54c"
+    },
+    {
+      "file": "dlls/mf/topology_loader.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2017 Nikolay Sivov"
+      ],
+      "sha256": "c6ccd0e22d7ddbf9dade3f75fa01121092f36c506eb50a6a05c83c1a0cc88496"
+    },
+    {
+      "file": "dlls/mfmediaengine/main.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2019 Jactry Zeng for CodeWeavers"
+      ],
+      "sha256": "29f8f70e46421004019d69da5203335758d51458ae5106a2ae65b4958e560c72"
+    },
+    {
+      "file": "dlls/mfmediaengine/mediaengine_private.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2019 Nikolay Sivov for CodeWeavers"
+      ],
+      "sha256": "f51f9d6defdc25ca92883c14f65b6ecbe12c282c1f99c05661f04736b428f97c"
+    },
+    {
+      "file": "dlls/mfmediaengine/video_frame_sink.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2019 Nikolay Sivov for CodeWeavers"
+      ],
+      "sha256": "b897c19f8b96e8c17afa53f1240e93a5e4240aa8052558feaa6613eb00db4c14"
+    },
+    {
+      "file": "dlls/mfplat/buffer.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2018 Alistair Leslie-Hughes"
+      ],
+      "sha256": "0d0ae927ad4bcc5cb7d0d9bdcdbf991cad576f3b331f0ac19e0790652978fc0d"
+    },
+    {
+      "file": "dlls/mfplat/main.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2014 Austin English"
+      ],
+      "sha256": "7e0a81b34450af68644efa7407c5712bb2cddc794d5ab09bd416643746151f96"
+    },
+    {
+      "file": "dlls/mfplat/tests/mfplat.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2015 Michael Müller"
+      ],
+      "sha256": "062c78ca3f20d4d69c49b20bd7eaf37020d9f6b38b9124fa602bd1a3cd6db2ec"
+    },
+    {
+      "file": "dlls/mfreadwrite/reader.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2014 Austin English"
+      ],
+      "sha256": "a20c3bc8a75c14a99d11a9ddab84645007da755184c6257d1979a3077c594817"
+    },
+    {
+      "file": "dlls/mfsrcsnk/media_source.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "aae50919dc40a71bfbe0a59ac970fcfc5f077abf25f7d9cd425cf486f9bebd8f"
+    },
+    {
+      "file": "dlls/msauddecmft/msauddecmft.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "ae941dcef27c01829a2e4fd11e9e405a623b6d284cb6d31b62411f2125b2b160"
+    },
+    {
+      "file": "dlls/msmpeg2vdec/Makefile.in",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "b8fb7904dbb8d602b6e2c524fe34f710732c2de406ef281d02531286e9ccd55b"
+    },
+    {
+      "file": "dlls/msmpeg2vdec/msmpeg2vdec.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "07544d0b5490492ea27b3d9106ad83daf147715128613c8379fd2606e1ce6bd2"
+    },
+    {
+      "file": "dlls/msmpeg2vdec/msmpeg2vdec.idl",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "1dd7532042b5c0b4c9c91dc11327534238df334c189c92f72eb90843493d0595"
+    },
+    {
+      "file": "dlls/ntdll/unix/loader.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright (C) 2020 Alexandre Julliard"
+      ],
+      "sha256": "34e26f64d9c330dc1bfcef88262f86adba645afa0c8df6ad70b454878cf374f1"
+    },
+    {
+      "file": "dlls/qasf/asfreader.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2020 Jactry Zeng for CodeWeavers"
+      ],
+      "sha256": "ec8bffd6818bd75750fd14e5282a2ea14a29b55a5526f5127f2411e151daa2ba"
+    },
+    {
+      "file": "dlls/qasf/dmowrapper.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright (C) 2019 Zebediah Figura"
+      ],
+      "sha256": "278f8343637255935a71b7239e3ec841eb517946ac6a67b2318a2aee2f57afa0"
+    },
+    {
+      "file": "dlls/qasf/tests/asfreader.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2019 Zebediah Figura",
+        "Copyright 2020 Jactry Zeng for CodeWeavers"
+      ],
+      "sha256": "ceb7cd9ed11339e5c2b4250a580bbba2fde0402e8cae7fbfccd6e2de591af5b9"
+    },
+    {
+      "file": "dlls/quartz/Makefile.in",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "c5e61a2618c10a7328adb1eeffdeca5d8ed7052264954407c136dfd846222a65"
+    },
+    {
+      "file": "dlls/quartz/acmwrapper.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2005 Christian Costa"
+      ],
+      "sha256": "a3b4b69197261b429057c0788f726fa95f55a06cd8dbaffe5d9eb00e1e36c00e"
+    },
+    {
+      "file": "dlls/quartz/colour.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2026 GloriousEggroll"
+      ],
+      "sha256": "999e1bf1d46f1087df004ad2742fbd2cab0e01692bea1718e8b449cda0918b8f"
+    },
+    {
+      "file": "dlls/quartz/dsoundrender.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2004 Christian Costa"
+      ],
+      "sha256": "e8bef9cbbbbd379325844b7fc913321982cf744e0e06ce3a71a3ee5daa224fcb"
+    },
+    {
+      "file": "dlls/quartz/filesource.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2003 Robert Shearman"
+      ],
+      "sha256": "a315983b72e862fa0274f9f63dea6d2cdfd3cf94c0ad263cdfe67875c28b9072"
+    },
+    {
+      "file": "dlls/quartz/filtergraph.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2002 Lionel Ulmer",
+        "Copyright 2004 Christian Costa"
+      ],
+      "sha256": "bbd874ddfbe263d4195f1715458859a20725cf5171027eede4cd0608db7977a3"
+    },
+    {
+      "file": "dlls/quartz/main.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2002 Lionel Ulmer"
+      ],
+      "sha256": "233f2f31bc4a9992c0bb38b1ed3a7e8068f607c3d47a26805003df965146ae42"
+    },
+    {
+      "file": "dlls/quartz/quartz_private.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2002 Lionel Ulmer"
+      ],
+      "sha256": "3c4469e4c6aae454db7c868924dd92d44241b30c9f55e781fb92c63290c55887"
+    },
+    {
+      "file": "dlls/quartz/quartz_strmif.idl",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2009 Alexandre Julliard"
+      ],
+      "sha256": "094e054b31f9b8af326ff454d1314a8a4840981da1ab008edef13697db8a71f4"
+    },
+    {
+      "file": "dlls/quartz/tests/Makefile.in",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "5bf8d12d3a16f7064c3a6b0725e002fcc8cce0ab16b3cf4a56c01b4153e0ad09"
+    },
+    {
+      "file": "dlls/quartz/tests/colour.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2026 GloriousEggroll"
+      ],
+      "sha256": "fbb780d241c8704b4386e473d3313d041731a1a52ec7b0b220ffea7b6615d7df"
+    },
+    {
+      "file": "dlls/quartz/tests/filesource.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2016 Sebastian Lackner",
+        "Copyright 2018 Zebediah Figura"
+      ],
+      "sha256": "691917123bb884817747ffc50243a2c3457e4ab3fd40f23ca5c56d60a5e9ba74"
+    },
+    {
+      "file": "dlls/quartz/tests/mpegvideo.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2022 Anton Baskanov",
+        "Copyright 2018 Zebediah Figura"
+      ],
+      "sha256": "d7182ca133ff355b1fe9b9f47ab2551b117db14ceb5219f98a4a059f447f842c"
+    },
+    {
+      "file": "dlls/quartz/videorenderer.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2004 Christian Costa"
+      ],
+      "sha256": "76ca468e2a0629d5962c16cdd7d1746c5777ae6167a4aa08cbcef6c4a5f91351"
+    },
+    {
+      "file": "dlls/quartz/vmr7.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2004 Christian Costa",
+        "Copyright 2008 Maarten Lankhorst",
+        "Copyright 2012 Aric Stewart"
+      ],
+      "sha256": "fe0b317789358de039f3b4325d592e6fdaf77f37e94c4ad6f46ff6607cc05e5f"
+    },
+    {
+      "file": "dlls/quartz/vmr7_presenter.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2023 Zebediah Figura for CodeWeavers"
+      ],
+      "sha256": "abfb25070f05c521f9e49bacee744124b9c9804f89027dc36359597f04fa82d6"
+    },
+    {
+      "file": "dlls/quartz/vmr9.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2004 Christian Costa",
+        "Copyright 2008 Maarten Lankhorst",
+        "Copyright 2012 Aric Stewart"
+      ],
+      "sha256": "177bde7c3201a0b7899c256a828cbf59cc85759bf32961fb85b5ac0fdfd2e1cb"
+    },
+    {
+      "file": "dlls/quartz/window.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2012 Aric Stewart, CodeWeavers"
+      ],
+      "sha256": "aac71c7c4b44a1562682383e9250fe79bab15ffe34aa3ae42e2155b5eb75399f"
+    },
+    {
+      "file": "dlls/rsx/Makefile.in",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "d23e683e82cc56d6294404f7284389e9fac2bdcae05fd8fc761b27dd6a92fd6b"
+    },
+    {
+      "file": "dlls/rsx/rsx.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2026 Geoffrey McRae"
+      ],
+      "sha256": "8264e36a7fbe9df1d89fc63b0b9ccb42b1d9825480b79f814158f5ac92c8c350"
+    },
+    {
+      "file": "dlls/rsx/rsx.spec",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "1631675eb8cededd2b66d310bda994f1ff717b20149a00c92c84e922e5390ab6"
+    },
+    {
+      "file": "dlls/rsx/rsx_classes.idl",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2026 Geoffrey McRae"
+      ],
+      "sha256": "2b8317e26e566a1089f05d130d63dce09d0bb3bc0c6b6f50bb15cb1e2d6b2cfa"
+    },
+    {
+      "file": "dlls/rtworkq/queue.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2019-2020 Nikolay Sivov for CodeWeavers"
+      ],
+      "sha256": "1a427d403036e3f74d71e6f41ab83ccd07e78e2bd39a53501c40d7fe1a147f94"
+    },
+    {
+      "file": "dlls/sechost/service.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 1995 Sven Verdoolaege",
+        "Copyright 2005 Mike McCormack",
+        "Copyright 2007 Rolf Kalbermatter"
+      ],
+      "sha256": "58e185dd67496e1d599f1d92be9ebee6ea836fdea4089e2ded9bec48b54cf29d"
+    },
+    {
+      "file": "dlls/user32/menu.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 1993 Martin Ayotte",
+        "Copyright 1994 Alexandre Julliard",
+        "Copyright 1997 Morten Welinder",
+        "Copyright 2005 Maxime Bellengé",
+        "Copyright 2006 Phil Krylov"
+      ],
+      "sha256": "9b284040ad8258bd595bcf1957504aafd976257fd1cb629ebb1db10305256a36"
+    },
+    {
+      "file": "dlls/vidreszr/vidreszr.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "e900dff56b259b109ff93f66b5df0fafd466c743b545bd835abfe313bb946b01"
+    },
+    {
+      "file": "dlls/win32u/dce.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 1993, 1994, 1995, 2001, 2004, 2005, 2008 Alexandre Julliard",
+        "Copyright 1996, 1997, 1999 Alex Korobka"
+      ],
+      "sha256": "c19a9794f76a1eb3525a7990d92a9c9d2eb4ac953ca8b77197987361d4e9a9cb"
+    },
+    {
+      "file": "dlls/win32u/input.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 1993 Bob Amstadt",
+        "Copyright 1993 David Metcalfe",
+        "Copyright 1996 Albrecht Kleine",
+        "Copyright 1996 Frans van Dorsselaer",
+        "Copyright 1997 David Faure",
+        "Copyright 1998 Morten Welinder",
+        "Copyright 1998 Ulrich Weigand",
+        "Copyright 2001 Eric Pouech",
+        "Copyright 2002 Alexandre Julliard"
+      ],
+      "sha256": "31b047ba89e5b3f0a51ed5d1aff7e42c4ac77461de00ee7e08100249a315ef5b"
+    },
+    {
+      "file": "dlls/win32u/ntuser_private.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 1993 Alexandre Julliard",
+        "Copyright 2022 Jacek Caban"
+      ],
+      "sha256": "36c7dde548bacbd368e0d7cf556bf1d6e9dec09e67e441578da39bb811b224ae"
+    },
+    {
+      "file": "dlls/win32u/opengl.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2012 Alexandre Julliard",
+        "Copyright 2025 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "53b959ee0d4338fbf3985dc38dc6b412271af6bfef4e0b8f9905b04de17ab298"
+    },
+    {
+      "file": "dlls/win32u/sysparams.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 1994 Alexandre Julliard",
+        "Copyright 2019 Zhiyi Zhang for CodeWeavers",
+        "Copyright 2021 Jacek Caban for CodeWeavers"
+      ],
+      "sha256": "1c2e1f2a33ae6005e3e96d82213f84237f3759f36f9104184c19a41a772d63c7"
+    },
+    {
+      "file": "dlls/win32u/vulkan.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright (c) 2017 Roderick Colenbrander"
+      ],
+      "sha256": "c55f2448fbd2d8a130a16f4f42269e7f36551856c166b7e684e8b268f1fc3f73"
+    },
+    {
+      "file": "dlls/win32u/win32u_private.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2021 Jacek Caban for CodeWeavers"
+      ],
+      "sha256": "e4534dbc6d95e57187fe95bb7bbe1eb92c6c635f034805e8584ace2fd94516cc"
+    },
+    {
+      "file": "dlls/win32u/window.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 1993, 1994 Alexandre Julliard"
+      ],
+      "sha256": "44540542560f00c3652adc9aad66069e098e64e1113112c75e9fe0008ddb368a"
+    },
+    {
+      "file": "dlls/winedmo/Makefile.in",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "e143347ed93e53a1ef917a0ad608a9edf801e96ce5fb88fe527ef3d4b68e988f"
+    },
+    {
+      "file": "dlls/winedmo/audio_decoder.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2022 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "e9a718bd04068cc076310b0f5fc4176b1ca9c0165cd9f4bc2ee02e51a26aa491"
+    },
+    {
+      "file": "dlls/winedmo/color_convert.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2022 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "46991caae33b5260d6c07217746651b4b5c7dde4d0d5e1f8433490ce7fc0743b"
+    },
+    {
+      "file": "dlls/winedmo/libavcodec/pcm_byte_order_reverse_bsf.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright (c) 2025 Conor McCarthy for CodeWeavers"
+      ],
+      "sha256": "8a4762bc9b83e8a784cb499b15f139cdae900c13ec15812738ee794fa52bfb18"
+    },
+    {
+      "file": "dlls/winedmo/main.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2002 Lionel Ulmer",
+        "Copyright 2010 Aric Stewart, CodeWeavers",
+        "Copyright 2024 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "b9a57bb61119d730a734072c3d126d0996f4d108409ce7e26e57559b1eea488c"
+    },
+    {
+      "file": "dlls/winedmo/media-converter/fossilize.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 Ziqing Hui for CodeWeavers",
+        "Copyright (c) 2018-2019 Hans-Kristian Arntzen"
+      ],
+      "sha256": "32ee10f32db0cb6561c0e0f1214e1f8a3e61e9cb7f60c9b229cbed37fe4d5ecb"
+    },
+    {
+      "file": "dlls/winedmo/media-converter/lib.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 Ziqing Hui for CodeWeavers"
+      ],
+      "sha256": "1ffbd937ba228cb5cf5f4a47e07854b0d048070f34957df930eec8dae584fd4d"
+    },
+    {
+      "file": "dlls/winedmo/media-converter/media-converter.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 Ziqing Hui for CodeWeavers"
+      ],
+      "sha256": "df90deb4619a553736e653432316e589a28b9362b64437ad46416a4aee5e57d7"
+    },
+    {
+      "file": "dlls/winedmo/media-converter/murmur3.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 Ziqing Hui for CodeWeavers"
+      ],
+      "sha256": "b2ee7b10d2ced2e514d61b8fdc4a9df8af0b0cee57615449bbbcb0e2fdb0a619"
+    },
+    {
+      "file": "dlls/winedmo/media_format.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2020-2021 Zebediah Figura for CodeWeavers"
+      ],
+      "sha256": "6202eceb1497e6d6f9155b787fa032543940bb28fe478fa057a17f3ab304513c"
+    },
+    {
+      "file": "dlls/winedmo/media_sink.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2023 Ziqing Hui for CodeWeavers"
+      ],
+      "sha256": "5f3c25fa104162af3f451fb3a3c313989c75b402272e35c69030d92f4d218380"
+    },
+    {
+      "file": "dlls/winedmo/media_source.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2020 Derek Lesho",
+        "Copyright 2020 Zebediah Figura for CodeWeavers"
+      ],
+      "sha256": "e619f08ded356a30a18320c1128f30b6a2b1a40ee324083cc022736a36f91ac7"
+    },
+    {
+      "file": "dlls/winedmo/mfplat.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2019 Nikolay Sivov for CodeWeavers",
+        "Copyright 2020 Zebediah Figura for CodeWeavers"
+      ],
+      "sha256": "af0da211e4f959ea3b865e7b7ad2cc47b078aaf2c2120967de5c7b781cae54fc"
+    },
+    {
+      "file": "dlls/winedmo/quartz_parser.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2010 Maarten Lankhorst for CodeWeavers",
+        "Copyright 2010 Aric Stewart for CodeWeavers",
+        "Copyright 2019-2020 Zebediah Figura"
+      ],
+      "sha256": "ca35c9993c9f17e9c532bc4050e133a828e357c45d5130798a9ddefc4e861d44"
+    },
+    {
+      "file": "dlls/winedmo/quartz_transform.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2022 Anton Baskanov"
+      ],
+      "sha256": "f8fa1b4c4eb500d9a4d5b63c04a1b32a2a262f0dbdec9627161e77de6c82ffaa"
+    },
+    {
+      "file": "dlls/winedmo/resampler.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2022 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "ce08e74f618535d4de341a9d6e75c1de142f7edb73e38f652cf777a477c33c58"
+    },
+    {
+      "file": "dlls/winedmo/rsrc.rc",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "79dee6f8036919e0b96134a784ac8ceca14f9873dfeb5ee74b1d8799567ebcc8"
+    },
+    {
+      "file": "dlls/winedmo/unix_demuxer.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "8f5f128c53f47390923b54dca9d0ea9d05044943679176ee8bc3f8656e017adb"
+    },
+    {
+      "file": "dlls/winedmo/unix_demuxer_mediaconv.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "e98d3c59d38a017336a77e61b1f4784a9feec13e8bead2b0c9d5056f27247305"
+    },
+    {
+      "file": "dlls/winedmo/unix_media_type.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "9f6f27e779268cda6049f30c00238a47dc8e07f1e74c2230e224f5ec32c2a0bb"
+    },
+    {
+      "file": "dlls/winedmo/unix_muxer.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 GloriousEggroll"
+      ],
+      "sha256": "2e3de023cffe3ad323cd0f2e279223fbdaf10d593c683be047a178dab1eaf819"
+    },
+    {
+      "file": "dlls/winedmo/unix_private.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "24a3ae6c0bb98b57edcb77aab23712fb74769535fde4dd43f501b378efffc706"
+    },
+    {
+      "file": "dlls/winedmo/unix_transform.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 GloriousEggroll",
+        "Copyright 2022 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "f6933ca3956f6e566c64dd0b2a36804361e0ccc5133a4a5e92eb9aaaec85f794"
+    },
+    {
+      "file": "dlls/winedmo/unixlib.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "a2272da3b7ed2a248370dcdd2ef6940f1efeda93482af26024ce987556e98a51"
+    },
+    {
+      "file": "dlls/winedmo/unixlib.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "2df7ee95be6b441f1fb894fee456d7a7257489deae2110f7c829f303b63ebbb7"
+    },
+    {
+      "file": "dlls/winedmo/video_decoder.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2022 Rémi Bernon for CodeWeavers",
+        "Copyright 2023 Shaun Ren for CodeWeavers"
+      ],
+      "sha256": "fdb24072a18d1d2da04ca11a1ac075b2324019ab9a8bc9dd2ae0e077a22203c2"
+    },
+    {
+      "file": "dlls/winedmo/video_encoder.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 Ziqing Hui for CodeWeavers"
+      ],
+      "sha256": "f47aeaede8dcc6f7dce9ff7bfe31d1cb76a9ccd3564ae26835df8bc3d55ff305"
+    },
+    {
+      "file": "dlls/winedmo/video_processor.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2022 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "dfce75bf22d28e64cb0b528aef103684444362bb87e67db1c9031a2ec5ab2dcd"
+    },
+    {
+      "file": "dlls/winedmo/winedmo.rgs",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "8e14efd2ffc8dcbc1bb74241243c5335f501b584b1a9cc16ee6bf15f9b8f45b4"
+    },
+    {
+      "file": "dlls/winedmo/winedmo.spec",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "6b2b676441aca5e593dc5bf63af2c676be0947b5ac608701e9a8261f0591e983"
+    },
+    {
+      "file": "dlls/winedmo/winedmo_classes.idl",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2019 Nikolay Sivov",
+        "Copyright 2019 Zebediah Figura"
+      ],
+      "sha256": "3c13963f7840d599787260ac8633fde022b812f424924fc14cca1e681b018e67"
+    },
+    {
+      "file": "dlls/winedmo/winedmo_guids.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2010 Maarten Lankhorst for CodeWeavers",
+        "Copyright 2010 Aric Stewart for CodeWeavers"
+      ],
+      "sha256": "1b1fa803a148736a888f60894ed8b3226aa7b0555079291a4faee86261d90dac"
+    },
+    {
+      "file": "dlls/winedmo/winedmo_private.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2010 Maarten Lankhorst for CodeWeavers"
+      ],
+      "sha256": "cb423ff5bd1b7fefbe79089f6fb923e42b5915b919c0460e4d1cf24cb9f228ed"
+    },
+    {
+      "file": "dlls/winedmo/winedmo_quartz_parser.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 GloriousEggroll",
+        "Copyright 2010 Maarten Lankhorst for CodeWeavers",
+        "Copyright 2010 Aric Stewart for CodeWeavers",
+        "Copyright 2019-2020 Zebediah Figura"
+      ],
+      "sha256": "7f3d107661f5315699a8861d1e4a72f6b8af0492f3f6259a9568cdb1e3b511e7"
+    },
+    {
+      "file": "dlls/winedmo/wm_reader.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2012 Austin English"
+      ],
+      "sha256": "fb5b185357b0f567e552da6b389ff480511e0868b306612d80ebe2169ed193e2"
+    },
+    {
+      "file": "dlls/winedmo/wma_decoder.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2022 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "03efff9090b5442c213d346517b136698d3e3f59a3cc04545589e5098acefcaf"
+    },
+    {
+      "file": "dlls/winemac.drv/Makefile.in",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "a88e5101031afd7fb3e392578a5eb6f7b14f46d2107dbbb847efb570d72b6351"
+    },
+    {
+      "file": "dlls/winemac.drv/cocoa_app.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2011, 2012, 2013 Ken Thomases for CodeWeavers Inc."
+      ],
+      "sha256": "1dfaecb92345e195c03925a123dea6d6a6faa99d619c84b8c1c6791318447883"
+    },
+    {
+      "file": "dlls/winemac.drv/cocoa_app.m",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2011, 2012, 2013 Ken Thomases for CodeWeavers Inc."
+      ],
+      "sha256": "9c31a0b3ccf62153d873d867927f95af34df89b558f7dfa76c2b1987a80925fb"
+    },
+    {
+      "file": "dlls/winemac.drv/cocoa_cursorclipping.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2011, 2012, 2013 Ken Thomases for CodeWeavers Inc.",
+        "Copyright 2021 Tim Clem for CodeWeavers Inc."
+      ],
+      "sha256": "26b0da57d07d296cd7c6697fe0cdf19cbdc857efc2424e36cb01b78b4e7a789e"
+    },
+    {
+      "file": "dlls/winemac.drv/cocoa_cursorclipping.m",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2011, 2012, 2013 Ken Thomases for CodeWeavers Inc.",
+        "Copyright 2021 Tim Clem for CodeWeavers Inc."
+      ],
+      "sha256": "ffe8b0bd1d060663687cd2778f17efbd6e47c291e4043637fb653931c4df590c"
+    },
+    {
+      "file": "dlls/winemac.drv/cocoa_gl_temporal.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "d4b4b70b5823c7ac5698e298b295182b656cc0d013a3e0c34d026b1902fcae99"
+    },
+    {
+      "file": "dlls/winemac.drv/cocoa_opengl.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2012, 2013 Ken Thomases for CodeWeavers Inc."
+      ],
+      "sha256": "4ac32a343464c72bedf85d633018ec5861c9950c020946cf50b87813306b5705"
+    },
+    {
+      "file": "dlls/winemac.drv/cocoa_opengl.m",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2012, 2013 Ken Thomases for CodeWeavers Inc."
+      ],
+      "sha256": "6165cf27e6b11eb4fc066021aa70de41a9535583588b1e96edc3b99fe2a90fa1"
+    },
+    {
+      "file": "dlls/winemac.drv/cocoa_region_picker.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "75869dd71752fa652cabf693500d5c360d87a0bea5eafcd0cc63d4f85110dda9"
+    },
+    {
+      "file": "dlls/winemac.drv/cocoa_spatial.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2026 GE-Proton macOS Wine PoC contributors"
+      ],
+      "sha256": "18106e2ade9fa21ed5b983629dd7a201ad863063bd7f277ce4580e77f9ec8671"
+    },
+    {
+      "file": "dlls/winemac.drv/cocoa_spatial.m",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2026 GE-Proton macOS Wine PoC contributors"
+      ],
+      "sha256": "ca6fe5e1bd98f2a8758583563eec31a47f3141c8dd6ab2952692000a5c4bcb1b"
+    },
+    {
+      "file": "dlls/winemac.drv/cocoa_upscaler.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "2621fde3fefbfa6876153c842af4471e761de221e8c1df678678fd963c35008a"
+    },
+    {
+      "file": "dlls/winemac.drv/cocoa_upscaler.m",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2026 GE-Proton macOS Wine PoC contributors"
+      ],
+      "sha256": "5e0e193758563a9e8aa7d8f69b080b0ed20f8639af517007d0bf5469818d93c5"
+    },
+    {
+      "file": "dlls/winemac.drv/cocoa_vmr7.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "3b223207658058723bcdd9e8dd965fa274ac3be15c5e7af42025615b9aa3d406"
+    },
+    {
+      "file": "dlls/winemac.drv/cocoa_window.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2011, 2012, 2013 Ken Thomases for CodeWeavers Inc."
+      ],
+      "sha256": "398d1a1e19972301b09a343d576de554544a53969648fa7ece3122ecdcb27a83"
+    },
+    {
+      "file": "dlls/winemac.drv/cocoa_window.m",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2011, 2012, 2013 Ken Thomases for CodeWeavers Inc."
+      ],
+      "sha256": "10cea263cff1ca0bf306e319429a458be7303e70826fe1f60a5e8a6a774c719a"
+    },
+    {
+      "file": "dlls/winemac.drv/gdi.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 1996 Alexandre Julliard",
+        "Copyright 2011, 2012, 2013 Ken Thomases for CodeWeavers, Inc."
+      ],
+      "sha256": "9f160f4675e2c443f5ff2fe4cc3ecefdb86835685429ecfa300fc8674b4db61d"
+    },
+    {
+      "file": "dlls/winemac.drv/macdrv_cocoa.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2011, 2012, 2013 Ken Thomases for CodeWeavers Inc."
+      ],
+      "sha256": "64c9c50976f4e61a637c6e1d5e932541d4052aa09f6cdb330689d133df52e647"
+    },
+    {
+      "file": "dlls/winemac.drv/mouse.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 1998 Ulrich Weigand",
+        "Copyright 2007 Henri Verbeet",
+        "Copyright 2011, 2012, 2013 Ken Thomases for CodeWeavers Inc."
+      ],
+      "sha256": "4feed84e2717225db6eddfc610a1059d22f88f3fa1023c55ab42820ab8dad288"
+    },
+    {
+      "file": "dlls/winemac.drv/opengl.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2012 Alexandre Julliard",
+        "Copyright 2012, 2013 Ken Thomases for CodeWeavers Inc."
+      ],
+      "sha256": "7c451a7524468197afea558a3189d091752492da37ee17d2328b0a97e4e384db"
+    },
+    {
+      "file": "dlls/winemac.drv/window.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 1993, 1994, 1995, 1996, 2001 Alexandre Julliard",
+        "Copyright 1993 David Metcalfe",
+        "Copyright 1995, 1996 Alex Korobka",
+        "Copyright 2011, 2012, 2013 Ken Thomases for CodeWeavers Inc."
+      ],
+      "sha256": "37ea3561a9f8c70adb1f223674b8a1885dd1e67c39a925ea82eb696e334a7225"
+    },
+    {
+      "file": "dlls/winemac.drv/wine_gdi_exclusions.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "10aebbc62d3d7e89bc90b13cfe96c1bd64df2b3d1ad99a3cd3a74f1eedc351f4"
+    },
+    {
+      "file": "dlls/winemac.drv/wine_gdi_frame_diff.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "2c39e219a4f9b413cedacb2d738846ce90ab1c2a053c7ff5a256298c0647b742"
+    },
+    {
+      "file": "dlls/winemac.drv/wine_gdi_temporal_presenter.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "24f57daeadda9283b765c23b4b075d455b39790ce889925beb88ff9564362189"
+    },
+    {
+      "file": "dlls/winemac.drv/wine_gdi_upscale_policy.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "79d2652b35c68040c52af4e5886fd7f6ffb9a1b9d90be32a28071e55af2cfe64"
+    },
+    {
+      "file": "dlls/winemac.drv/wine_gdi_upscaler.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "a862561ea9fab33b1a06006aed2b3592a92d97d0c94412860c41cc1c87970199"
+    },
+    {
+      "file": "dlls/winepulse.drv/pulse.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2011-2012 Maarten Lankhorst",
+        "Copyright 2010-2011 Maarten Lankhorst for CodeWeavers",
+        "Copyright 2011 Andrew Eikum for CodeWeavers",
+        "Copyright 2022 Huw Davies"
+      ],
+      "sha256": "f89a713997d1eb88d8189fab1127ac6660a2a79efc476e898305007e046239da"
+    },
+    {
+      "file": "dlls/winmm/waveform.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 1993      Martin Ayotte"
+      ],
+      "sha256": "a6d20a98c42b2e0aecd1000111bfea161a4ed0d639fd9697c4c73c241aef98a7"
+    },
+    {
+      "file": "dlls/wmadmod/Makefile.in",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "1020689ee0d5b370d66765a76ff51e3ba589250a3edca7da2509d7ab302b62b7"
+    },
+    {
+      "file": "dlls/wmadmod/wmadmod.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "eebf639f92517c339688da94dfc358d95644d33a9a5f157f3d391eec50410ab1"
+    },
+    {
+      "file": "dlls/wmp/oleobj.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2014 Jacek Caban for CodeWeavers"
+      ],
+      "sha256": "0847648e03fb31357c019428b148611cd50c0513c7bfce832297bd87bf75e396"
+    },
+    {
+      "file": "dlls/wmp/player.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2014 Jacek Caban for CodeWeavers"
+      ],
+      "sha256": "618f067268a68b7990be6dc37e355ee8a874782791625f499f3a91d5a77fe43d"
+    },
+    {
+      "file": "dlls/wmp/wmp_private.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2014 Jacek Caban for CodeWeavers"
+      ],
+      "sha256": "593651653903a6ecfd7f3b3a19a43a856041bc21209b22e6cece219ae5aa63bf"
+    },
+    {
+      "file": "dlls/wmvcore/Makefile.in",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "78670601c7205c69363c38871c90e7d8f2db59c635de35390c505a456dd9300d"
+    },
+    {
+      "file": "dlls/wmvcore/async_reader.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2012 Austin English"
+      ],
+      "sha256": "8ee5565ab2c924770eabbe4b0d5daacc5e55b1a59776af2e07d1961dd203da1a"
+    },
+    {
+      "file": "dlls/wmvcore/wmvcore_main.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2012 Austin English"
+      ],
+      "sha256": "0c151954fd620976ac4210a6e6644a7a2d46a88a65668ba17bfe49d49059d550"
+    },
+    {
+      "file": "dlls/wmvcore/wmvcore_private.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2015 Jacek Caban for CodeWeavers"
+      ],
+      "sha256": "f96de1c0890d884675827d5df0afb20acd261d979fb93554cb39ec5bc02d9378"
+    },
+    {
+      "file": "dlls/wow64win/user.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2021 Jacek Caban for CodeWeavers"
+      ],
+      "sha256": "205b71b761abdf174550da010a637af59a98d20094bb6fe305b4362da7e857b2"
+    },
+    {
+      "file": "dlls/wtsapi32/wtsapi32.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2005 Ulrich Czekalla"
+      ],
+      "sha256": "9df92a4853f658763fdcb693a3ee549d28b629ea61f44544d03ec9db4a6ecc44"
+    },
+    {
+      "file": "include/Makefile.in",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "4248b017f268e923e2a77dbe39663029b842373e089c619fa562481b94f28c1e"
+    },
+    {
+      "file": "include/mediaobj.idl",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright (C) 2002 Alexandre Julliard",
+        "Copyright (C) 2004 Vincent Béron"
+      ],
+      "sha256": "43fa38903652cb15e171d6facd196a21ed96660d292b41de6e4610f38c57f869"
+    },
+    {
+      "file": "include/mfmediaengine.idl",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2019 Jactry Zeng for CodeWeavers"
+      ],
+      "sha256": "1f003266489ef414287039a2bd30294f11d377fa1a8080b98c24ef05fe8d3140"
+    },
+    {
+      "file": "include/nserror.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright (C) 2017 Austin English"
+      ],
+      "sha256": "fb658e2b13211c008cba499472a1e86bb5ea078d564fb88432b29f60d1abb098"
+    },
+    {
+      "file": "include/wine/macdrv_video.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "e23add92c1dedddc694e41f84d62397eca4fc7516321ff6568ca80b55da926c5"
+    },
+    {
+      "file": "include/wine/mfinternal.idl",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2022 Nikolay Sivov for CodeWeavers"
+      ],
+      "sha256": "a62b812edfc1a320dd6ee768316598d991096eb8828ec341764b981c4cc6360b"
+    },
+    {
+      "file": "include/wine/winedmo.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 Rémi Bernon for CodeWeavers"
+      ],
+      "sha256": "c7bda53f65169a600cb43c76d3dbdc5cd512ee17794e39ba7da42fcf75c5cacb"
+    },
+    {
+      "file": "include/winnt.h",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 1996 Alexandre Julliard"
+      ],
+      "sha256": "defbcc0ff5e57a271a9873af26e151c4cb89e455310ffe0ddbefcad8dc68d213"
+    },
+    {
+      "file": "include/wmp.idl",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2014 Jacek Caban for CodeWeavers"
+      ],
+      "sha256": "b054b3245119a282bc35558152c117bc716334032a45f995ebe896c91602c5f4"
+    },
+    {
+      "file": "libs/strmbase/pin.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2003 Robert Shearman",
+        "Copyright 2010 Aric Stewart, CodeWeavers"
+      ],
+      "sha256": "2cb9eb3d10c29202403a9eda3d1be1465bbb1f05b0894a3bb42540e7bedb1924"
+    },
+    {
+      "file": "libs/strmbase/renderer.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2012 Aric Stewart, CodeWeavers",
+        "is covered by the following copyright information:",
+        "Copyright (C) 2005-2007 Wim Taymans <wim.taymans@gmail.com>"
+      ],
+      "sha256": "cb0a6eb96a79d8b193d458f2b59f045e90b0fce12c5e5edab7034aebec73a3b2"
+    },
+    {
+      "file": "libs/vkd3d/libs/vkd3d-shader/ir.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2023 Conor McCarthy for CodeWeavers",
+        "Copyright 2023-2024 Elizabeth Figura for CodeWeavers"
+      ],
+      "sha256": "9dad6eb25fc9aab40140de8211f1df911ea8068ad86bcbe2ea7d9f2a42b157a2"
+    },
+    {
+      "file": "loader/preloader_mac.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright (C) 1995,96,97,98,99,2000,2001,2002 Free Software Foundation, Inc.",
+        "Copyright (C) 2004 Mike McCormack for CodeWeavers",
+        "Copyright (C) 2004 Alexandre Julliard",
+        "Copyright (C) 2017 Michael Müller",
+        "Copyright (C) 2017 Sebastian Lackner"
+      ],
+      "sha256": "a58bec99c514080035f5bcdf36d670ecede517dcec161904f4daaee2811af995"
+    },
+    {
+      "file": "loader/wine.inf.in",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        ";; Copyright (C) 2004 Chris Morgan",
+        ";; Copyright (C) 2004 Brian Vincent",
+        ";; Copyright (C) 2004 Alexandre Julliard"
+      ],
+      "sha256": "c63967136a90871bf8ff9a71ba84546c043bcac118b3f029f99721c344ee2300"
+    },
+    {
+      "file": "tools/gitlab/image.docker",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [],
+      "sha256": "496366c1aac2ea3951d110f378fd8e5d95de75c69d389a264fb1f2290ba14069"
+    },
+    {
+      "file": "tools/winebuild/spec32.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 1993 Robert J. Amstadt",
+        "Copyright 1995 Martin von Loewis",
+        "Copyright 1995, 1996, 1997 Alexandre Julliard",
+        "Copyright 1997 Eric Youngdale",
+        "Copyright 1999 Ulrich Weigand"
+      ],
+      "sha256": "34ce033070a9747c9be8c375599a10e0cace15d9754a86e0f24b0ee2be47fe33"
+    }
+  ]
+}

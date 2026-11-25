@@ -1,3 +1,4 @@
+/* GE macOS Wine PoC modification notice: 2026-11-24; GE media integration and macOS adaptations. Original copyright and license retained. See MODIFICATIONS.json. */
 /*
  * Optional MetalFX Spatial presentation for opaque GDI surfaces.
  * Copyright 2026 GE-Proton macOS Wine PoC contributors

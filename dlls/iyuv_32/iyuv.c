@@ -1,3 +1,4 @@
+/* GE macOS Wine PoC modification notice: 2026-11-24; GE media integration and macOS adaptations. Original copyright and license retained. See MODIFICATIONS.json. */
 /*
  * iyuv Video "Decoder"
  * Copyright 2026 Brendan McGrath for CodeWeavers
