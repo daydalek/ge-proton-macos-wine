@@ -39,7 +39,7 @@ and use the repository itself as the Wine source:
 
 ```sh
 export POC_WORK_DIR="$(mktemp -d)"
-export GITHUB_RUN_NUMBER=69
+export GITHUB_RUN_NUMBER=1
 bash scripts/ci/build-release.sh
 ```
 
