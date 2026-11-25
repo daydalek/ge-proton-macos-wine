@@ -2182,17 +2182,21 @@ HDEVNOTIFY WINAPI I_ScRegisterDeviceNotification( HANDLE handle, DEV_BROADCAST_H
  */
 BOOL WINAPI I_ScUnregisterDeviceNotification( HDEVNOTIFY handle )
 {
-    struct device_notify *notify = handle;
+    struct device_notify *notify;
 
     TRACE("%p\n", handle);
 
-    if (!handle)
-        return FALSE;
-
     EnterCriticalSection( &service_cs );
-    list_remove( &notify->entry );
-    LeaveCriticalSection(&service_cs);
-    free( notify->path );
-    free( notify );
-    return TRUE;
+    LIST_FOR_EACH_ENTRY( notify, &device_notify_list, struct device_notify, entry )
+    {
+        if (notify != handle) continue;
+        list_remove( &notify->entry );
+        LeaveCriticalSection( &service_cs );
+        free( notify->path );
+        free( notify );
+        return TRUE;
+    }
+    LeaveCriticalSection( &service_cs );
+    SetLastError( ERROR_INVALID_HANDLE );
+    return FALSE;
 }
