@@ -55,6 +55,7 @@ typedef struct
     FINDEX_INFO_LEVELS level;      /* Level passed to FindFirst */
     UNICODE_STRING    path;        /* NT path used to open the directory */
     BOOL              is_root;     /* is directory the root of the drive? */
+    BOOL              legacy_info; /* use FileBothDirectoryInformation for older filesystem hooks */
     UINT              data_pos;    /* current position in dir data */
     UINT              data_len;    /* length of dir data */
     UINT              data_size;   /* size of data buffer, or 0 when everything has been read */
@@ -1385,6 +1386,7 @@ HANDLE WINAPI DECLSPEC_HOTPATCH FindFirstFileExW( LPCWSTR filename, FINDEX_INFO_
     info->data_size = size;
     info->search_op = search_op;
     info->level     = level;
+    info->legacy_info = FALSE;
 
     if (device)
     {
@@ -1405,8 +1407,17 @@ HANDLE WINAPI DECLSPEC_HOTPATCH FindFirstFileExW( LPCWSTR filename, FINDEX_INFO_
         else
         {
             RtlInitUnicodeString( &mask_str, fixedup_mask );
+            io.Information = 0;
             status = NtQueryDirectoryFile( info->handle, 0, NULL, NULL, &io, info->data, info->data_size,
                                            FileIdExtdBothDirectoryInformation, FALSE, &mask_str, TRUE );
+            /* Older virtual filesystem hooks can accept an unknown information class
+             * without returning any records. Retry the format they understand. */
+            if (!status && !io.Information)
+            {
+                info->legacy_info = TRUE;
+                status = NtQueryDirectoryFile( info->handle, 0, NULL, NULL, &io, info->data, info->data_size,
+                                               FileBothDirectoryInformation, FALSE, &mask_str, TRUE );
+            }
         }
         if (fixedup_mask != mask) HeapFree( GetProcessHeap(), 0, fixedup_mask );
         if (status)
@@ -1519,6 +1530,8 @@ BOOL WINAPI DECLSPEC_HOTPATCH FindNextFileW( HANDLE handle, WIN32_FIND_DATAW *da
 {
     FIND_FIRST_INFO *info = handle;
     FILE_ID_EXTD_BOTH_DIRECTORY_INFORMATION *dir_info;
+    const WCHAR *file_name, *short_name;
+    UINT short_name_len;
     BOOL ret = FALSE;
     NTSTATUS status;
 
@@ -1539,8 +1552,10 @@ BOOL WINAPI DECLSPEC_HOTPATCH FindNextFileW( HANDLE handle, WIN32_FIND_DATAW *da
         {
             IO_STATUS_BLOCK io;
 
+            io.Information = 0;
             if (info->data_size)
                 status = NtQueryDirectoryFile( info->handle, 0, NULL, NULL, &io, info->data, info->data_size,
+                                               info->legacy_info ? FileBothDirectoryInformation :
                                                FileIdExtdBothDirectoryInformation, FALSE, NULL, FALSE );
             else
                 status = STATUS_NO_MORE_FILES;
@@ -1556,9 +1571,27 @@ BOOL WINAPI DECLSPEC_HOTPATCH FindNextFileW( HANDLE handle, WIN32_FIND_DATAW *da
             }
             info->data_len = io.Information;
             info->data_pos = 0;
+            if (!info->data_len)
+            {
+                SetLastError( ERROR_NO_MORE_FILES );
+                break;
+            }
         }
 
         dir_info = (FILE_ID_EXTD_BOTH_DIRECTORY_INFORMATION *)(info->data + info->data_pos);
+        if (info->legacy_info)
+        {
+            const FILE_BOTH_DIRECTORY_INFORMATION *legacy = (const void *)dir_info;
+            file_name = legacy->FileName;
+            short_name = legacy->ShortName;
+            short_name_len = legacy->ShortNameLength;
+        }
+        else
+        {
+            file_name = dir_info->FileName;
+            short_name = dir_info->ShortName;
+            short_name_len = dir_info->ShortNameLength;
+        }
 
         if (dir_info->NextEntryOffset) info->data_pos += dir_info->NextEntryOffset;
         else info->data_pos = info->data_len;
@@ -1566,7 +1599,6 @@ BOOL WINAPI DECLSPEC_HOTPATCH FindNextFileW( HANDLE handle, WIN32_FIND_DATAW *da
         /* don't return '.' and '..' in the root of the drive */
         if (info->is_root)
         {
-            const WCHAR *file_name = dir_info->FileName;
             if (dir_info->FileNameLength == sizeof(WCHAR) && file_name[0] == '.') continue;
             if (dir_info->FileNameLength == 2 * sizeof(WCHAR) &&
                 file_name[0] == '.' && file_name[1] == '.') continue;
@@ -1578,16 +1610,16 @@ BOOL WINAPI DECLSPEC_HOTPATCH FindNextFileW( HANDLE handle, WIN32_FIND_DATAW *da
         data->ftLastWriteTime  = *(FILETIME *)&dir_info->LastWriteTime;
         data->nFileSizeHigh    = dir_info->EndOfFile.QuadPart >> 32;
         data->nFileSizeLow     = (DWORD)dir_info->EndOfFile.QuadPart;
-        data->dwReserved0      = dir_info->ReparsePointTag;
+        data->dwReserved0      = info->legacy_info ? 0 : dir_info->ReparsePointTag;
         data->dwReserved1      = 0;
 
-        memcpy( data->cFileName, dir_info->FileName, dir_info->FileNameLength );
+        memcpy( data->cFileName, file_name, dir_info->FileNameLength );
         data->cFileName[dir_info->FileNameLength/sizeof(WCHAR)] = 0;
 
         if (info->level != FindExInfoBasic)
         {
-            memcpy( data->cAlternateFileName, dir_info->ShortName, dir_info->ShortNameLength );
-            data->cAlternateFileName[dir_info->ShortNameLength/sizeof(WCHAR)] = 0;
+            memcpy( data->cAlternateFileName, short_name, short_name_len );
+            data->cAlternateFileName[short_name_len/sizeof(WCHAR)] = 0;
         }
         else
             data->cAlternateFileName[0] = 0;
