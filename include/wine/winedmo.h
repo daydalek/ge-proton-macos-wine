@@ -47,6 +47,7 @@ struct winedmo_transform { UINT64 handle; };
 /* Flags for winedmo_transform_push_input */
 #define WINEDMO_SAMPLE_FLAG_SYNC_POINT      0x01
 #define WINEDMO_SAMPLE_FLAG_DISCONTINUITY   0x02
+#define WINEDMO_SAMPLE_FLAG_COMPLETE_FRAME  0x40  /* input contains a complete demuxed frame */
 /* Flags returned by winedmo_transform_get_output */
 #define WINEDMO_SAMPLE_FLAG_INCOMPLETE      0x04  /* more output pending without new input */
 #define WINEDMO_SAMPLE_FLAG_FORMAT_CHANGED  0x08  /* output format changed; call get_output_format */

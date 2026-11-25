@@ -1268,6 +1268,9 @@ static DWORD CALLBACK wm_demux_thread(void *arg)
             if ((in_flags & WINEDMO_SAMPLE_FLAG_SYNC_POINT) && IsEqualGUID(&s->major_type, &MFMediaType_Video))
                 s->next_decoded_cleanpoint = true;
 
+            /* The demuxer has already assembled complete compressed frames.
+             * ASF VC-1 frames may omit elementary-stream start codes. */
+            in_flags |= WINEDMO_SAMPLE_FLAG_COMPLETE_FRAME;
             if ((dec_status = winedmo_transform_push_input(s->decoder, src, data_len,
                     in_pts, INT64_MIN, in_dur, in_flags))
                     && dec_status != STATUS_DEVICE_BUSY)

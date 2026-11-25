@@ -1134,6 +1134,13 @@ NTSTATUS transform_push_input( void *arg )
         const uint8_t *data = t->packet->data;
         int size = t->packet->size;
 
+        /* Preserve the frame boundaries supplied by container demuxers.
+         * In particular, ASF VC-1 payloads can have no start codes at all. */
+        if (params->flags & WINEDMO_SAMPLE_FLAG_COMPLETE_FRAME)
+            t->parser->flags |= PARSER_FLAG_COMPLETE_FRAMES;
+        else
+            t->parser->flags &= ~PARSER_FLAG_COMPLETE_FRAMES;
+
         while (size > 0)
         {
             uint8_t *parsed_data = NULL;
