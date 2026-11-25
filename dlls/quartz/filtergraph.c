@@ -2769,6 +2769,8 @@ static HRESULT WINAPI MediaSeeking_SetPositions(IMediaSeeking *iface, LONGLONG *
     HRESULT hr = E_NOTIMPL, filter_hr;
     struct filter *filter;
     FILTER_STATE state;
+    BOOL positioning = (current_flags & AM_SEEKING_PositioningBitsMask)
+            || (stop_flags & AM_SEEKING_PositioningBitsMask);
 
     TRACE("graph %p, current %s, current_flags %#lx, stop %s, stop_flags %#lx.\n", graph,
             current_ptr ? wine_dbgstr_longlong(*current_ptr) : "<null>", current_flags,
@@ -2790,8 +2792,9 @@ static HRESULT WINAPI MediaSeeking_SetPositions(IMediaSeeking *iface, LONGLONG *
 
     EnterCriticalSection(&graph->cs);
 
+    /* No-position requests still forward ReturnTime, while retaining filter state. */
     state = graph->state;
-    if (state == State_Running && !graph->needs_async_run)
+    if (positioning && state == State_Running && !graph->needs_async_run)
         IMediaControl_Pause(&graph->IMediaControl_iface);
 
     LIST_FOR_EACH_ENTRY(filter, &graph->filters, struct filter, entry)
@@ -2829,7 +2832,7 @@ static HRESULT WINAPI MediaSeeking_SetPositions(IMediaSeeking *iface, LONGLONG *
         graph->stream_elapsed = 0;
     }
 
-    if (state == State_Running && !graph->needs_async_run)
+    if (positioning && state == State_Running && !graph->needs_async_run)
         IMediaControl_Run(&graph->IMediaControl_iface);
 
     LeaveCriticalSection(&graph->cs);
