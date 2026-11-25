@@ -38,8 +38,20 @@ static inline struct ddraw_surface *impl_from_IDirectDrawGammaControl(IDirectDra
     return CONTAINING_RECORD(iface, struct ddraw_surface, IDirectDrawGammaControl_iface);
 }
 
-static BOOL ddraw_surface_is_lost(const struct ddraw_surface *surface)
+static BOOL ddraw_surface_is_lost(struct ddraw_surface *surface)
 {
+    if (surface->surface_desc.ddsCaps.dwCaps & DDSCAPS_PRIMARYSURFACE)
+    {
+        struct wined3d_display_mode mode;
+
+        /* Applications can change modes through USER32, bypassing DirectDraw's
+         * SetDisplayMode state changes. A primary surface from the previous
+         * mode must be lost so its owner can recreate it at the new size. */
+        if (SUCCEEDED(wined3d_output_get_display_mode(surface->ddraw->wined3d_output, &mode, NULL))
+                && (mode.width != surface->surface_desc.dwWidth
+                || mode.height != surface->surface_desc.dwHeight))
+            surface->is_lost = TRUE;
+    }
     return ddraw_surface_can_be_lost(surface)
             && (surface->ddraw->device_state != DDRAW_DEVICE_STATE_OK || surface->is_lost);
 }
@@ -1780,6 +1792,13 @@ static HRESULT WINAPI DECLSPEC_HOTPATCH ddraw_surface1_Blt(IDirectDrawSurface *i
     }
 
     wined3d_mutex_lock();
+
+    if (ddraw_surface_is_lost(dst_impl) || (src_impl && ddraw_surface_is_lost(src_impl)))
+    {
+        WARN("Surface lost, returning DDERR_SURFACELOST.\n");
+        wined3d_mutex_unlock();
+        return DDERR_SURFACELOST;
+    }
 
     if (flags & (DDBLT_COLORFILL | DDBLT_DEPTHFILL))
     {
