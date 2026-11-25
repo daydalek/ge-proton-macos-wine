@@ -2812,7 +2812,9 @@ static HRESULT WINAPI MediaSeeking_SetPositions(IMediaSeeking *iface, LONGLONG *
                 *current_ptr = current;
             if (stop_ptr && (stop_flags & AM_SEEKING_ReturnTime))
                 *stop_ptr = stop;
-            graph->current_pos = current;
+            /* Keep the graph clock snapshot for no-position requests. */
+            if ((current_flags & 0x7) != AM_SEEKING_NoPositioning)
+                graph->current_pos = current;
         }
         else if (filter_hr != E_NOTIMPL)
         {
@@ -5486,7 +5488,8 @@ static HRESULT WINAPI MediaFilter_Pause(IMediaFilter *iface)
         REFERENCE_TIME time;
         IReferenceClock_GetTime(graph->refClock, &time);
         graph->stream_elapsed += time - graph->stream_start;
-        graph->current_pos += graph->stream_elapsed;
+        /* stream_elapsed includes prior Run intervals; add this interval once. */
+        graph->current_pos += time - graph->stream_start;
     }
 
     LIST_FOR_EACH_ENTRY(filter, &graph->filters, struct filter, entry)
