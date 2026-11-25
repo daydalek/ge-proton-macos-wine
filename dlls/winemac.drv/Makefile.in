@@ -24,6 +24,7 @@ SOURCES = \
 	cocoa_icon_utils.m \
 	cocoa_main.m \
 	cocoa_opengl.m \
+	cocoa_spatial.m \
 	cocoa_status_item.m \
 	cocoa_window.m \
 	d3dmetal.c \
