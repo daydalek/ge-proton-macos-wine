@@ -25,8 +25,8 @@
 #include "macdrv_cocoa.h"
 #include "cocoa_app.h"
 #include "cocoa_event.h"
-
 #pragma GCC diagnostic ignored "-Wdeclaration-after-statement"
+#include "cocoa_gl_temporal.h"
 
 
 @interface WineOpenGLContext ()
@@ -35,6 +35,8 @@
 
     + (NSView*) dummyView;
     - (void) wine_updateBackingSize:(const CGSize*)size;
+    - (void)wine_presentTemporal;
+    - (void)wine_destroyTemporal;
 
 @end
 
@@ -43,8 +45,28 @@
 @dynamic view;
 @synthesize latentView, needsUpdate, needsReattach;
 
+    - (void)wine_destroyTemporal
+    {
+        WineOpenGLTemporalBridge *bridge=temporalBridge;
+        temporalBridge=nil;
+        [bridge destroyGLResources:self.CGLContextObj];
+        [bridge retire]; [bridge release];
+    }
+    - (void)wine_presentTemporal
+    {
+        if (![WineGDIUpscaler temporalEnabled]) return;
+        /* The GL producer owns this field; all view operations stay on main. */
+        __block BOOL changed=NO;
+        OnMainThread(^{ changed=temporalBridge && ![temporalBridge matchesView:self.view]; });
+        if (changed) [self wine_destroyTemporal];
+        if (!temporalBridge) OnMainThread(^{
+            temporalBridge=[[WineOpenGLTemporalBridge alloc] initWithView:self.view];
+        });
+        [temporalBridge captureContext:self.CGLContextObj];
+    }
     - (void) dealloc
     {
+        [self wine_destroyTemporal];
         [[self view] release];
         [latentView release];
         [super dealloc];
@@ -224,6 +246,7 @@ void macdrv_dispose_opengl_context(macdrv_opengl_context c)
 {
     WineOpenGLContext *context = (WineOpenGLContext*)c;
 
+    [context wine_destroyTemporal];
     [context removeFromViews:YES];
     [context release];
 }
@@ -341,6 +364,7 @@ void macdrv_flush_opengl_context(macdrv_opengl_context c)
     WineOpenGLContext *context = (WineOpenGLContext*)c;
 
     macdrv_update_opengl_context(c);
+    [context wine_presentTemporal];
     [context flushBuffer];
 }
 }

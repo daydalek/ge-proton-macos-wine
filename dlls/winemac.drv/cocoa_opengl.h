@@ -23,6 +23,7 @@
 
 @interface WineOpenGLContext : NSOpenGLContext
 {
+    id temporalBridge;
     NSView* latentView;
     BOOL needsUpdate;
     BOOL needsReattach;
