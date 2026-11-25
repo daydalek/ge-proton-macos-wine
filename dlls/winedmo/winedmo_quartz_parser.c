@@ -1,3 +1,4 @@
+/* GE Wine Linux modification notice: 2026-11-02; Linux integration and platform adaptations. Original copyright and license retained. See LINUX_MODIFICATIONS.json. */
 /* GE macOS Wine PoC modification notice: 2026-11-24; GE media integration and macOS adaptations. Original copyright and license retained. See MODIFICATIONS.json. */
 /*
  * DirectShow parser filters backed by winedmo (ffmpeg) demuxer

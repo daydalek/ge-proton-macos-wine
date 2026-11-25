@@ -1,0 +1,53 @@
+{
+  "project": "GE Wine Linux integration",
+  "date": "2026-11-02",
+  "scope": "Files changed by Linux-specific patches",
+  "licenses": "Original per-file licenses and upstream LICENSE/COPYING/AUTHORS remain applicable",
+  "files": [
+    {
+      "file": "dlls/qasf/asfreader.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2020 Jactry Zeng for CodeWeavers"
+      ],
+      "sha256": "8899674e5a5c4c7d82064e4262fd91462a0f25429f653953660df502855ee8b1"
+    },
+    {
+      "file": "dlls/quartz/filtergraph.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2002 Lionel Ulmer",
+        "Copyright 2004 Christian Costa"
+      ],
+      "sha256": "f5b769505c67f7205c67e44d0689d2b7e24d1c01d8dc2de9fd3b371277935fca"
+    },
+    {
+      "file": "dlls/winedmo/winedmo_quartz_parser.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2024 GloriousEggroll",
+        "Copyright 2010 Maarten Lankhorst for CodeWeavers",
+        "Copyright 2010 Aric Stewart for CodeWeavers",
+        "Copyright 2019-2020 Zebediah Figura"
+      ],
+      "sha256": "e8e8fcab1a6ffd95e575881af6102d4cde7482932a5e6e8fa7b0771fa5bb5285"
+    },
+    {
+      "file": "dlls/winepulse.drv/Makefile.in",
+      "modification_date": "2026-11-02",
+      "original_copyright_notices": [],
+      "sha256": "5d76f6a0c8d30be44d0508425813cb5d7211119ded675cc2689e45e8d35d9249"
+    },
+    {
+      "file": "dlls/winepulse.drv/pulse.c",
+      "modification_date": "2026-11-24",
+      "original_copyright_notices": [
+        "Copyright 2011-2012 Maarten Lankhorst",
+        "Copyright 2010-2011 Maarten Lankhorst for CodeWeavers",
+        "Copyright 2011 Andrew Eikum for CodeWeavers",
+        "Copyright 2022 Huw Davies"
+      ],
+      "sha256": "b9b25079ab5583b84c550c729ce0d087a39c6fff4b6ca18b0c6e7de6f9da77cf"
+    }
+  ]
+}
