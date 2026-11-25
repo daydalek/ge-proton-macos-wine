@@ -53,7 +53,7 @@ def main():
         'validation_scope': 'packaging the already released Valve media core',
         'core': 'media', 'wine_base': 'Valve Wine 46b29104', 'input_archive_sha256': DIGEST}) + '\n')
     (release / 'RELEASE-NOTES.md').write_text('Libraries integration check; Actions artifact only.\n')
-    version = '11.0.' + str(int(os.environ['GITHUB_RUN_NUMBER']) + 1)
+    version = '11.0.' + str(int(os.environ.get('POC_RUNTIME_VERSION_BASE', '68')) + int(os.environ['GITHUB_RUN_NUMBER']))
     subprocess.run([sys.executable, str(PROJECT / 'scripts/ci/build-libraries.py'),
                     '--version', version, '--wine-stage', str(stage / 'media'), '--output', str(release)], check=True)
     install = WORK / 'install'

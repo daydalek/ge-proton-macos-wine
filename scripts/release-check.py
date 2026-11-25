@@ -25,13 +25,22 @@ PUBLIC_CONFIGS = {'build.env', 'crossover-patch-series.txt', 'crossover-source-l
                   'linux-build.json'}
 LOCAL_ROOTS = {'work', 'outputs', 'docs', 'plans', 'reports', 'logs'}
 project_owned_prefixes = ('scripts/', 'native/', 'tools/probes/', 'tools/tests/', 'configs/', '.github/')
-try:
-    upstream_entries = {}
-    for line in subprocess.check_output(['git', 'ls-tree', '-r', 'vendor/crossover'], cwd=project, text=True).splitlines():
-        meta, name = line.split('\t', 1)
-        upstream_entries[name] = meta.split()[2]
-except subprocess.CalledProcessError:
-    upstream_entries = {}
+def upstream_tree_lines():
+    lock = json.loads((project / 'configs/crossover-source-lock.json').read_text())
+    refs = [lock.get('repository_baseline_commit'), 'vendor/crossover']
+    for ref in filter(None, refs):
+        try:
+            return subprocess.check_output(['git', 'ls-tree', '-r', ref], cwd=project,
+                                           text=True, stderr=subprocess.DEVNULL).splitlines()
+        except subprocess.CalledProcessError:
+            pass
+    return []
+
+
+upstream_entries = {}
+for line in upstream_tree_lines():
+    meta, name = line.split('\t', 1)
+    upstream_entries[name] = meta.split()[2]
 upstream_names = set(upstream_entries)
 
 def pristine_upstream_file(name, data):

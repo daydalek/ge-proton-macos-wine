@@ -20,7 +20,7 @@ on:
         type: boolean
         default: false
       linux_release_tag:
-        description: 'Optional new Linux-only prerelease tag, e.g. v0.1.6-linux-amd64'
+        description: 'Optional new Linux-only prerelease tag, e.g. v0.1.13-linux-amd64'
         type: string
         default: ''
 

@@ -8,7 +8,7 @@ on:
         type: boolean
         default: false
       release_tag:
-        description: 'Optional new Linux release tag, e.g. v0.1.6-linux-amd64'
+        description: 'Optional new Linux release tag, e.g. v0.1.13-linux-amd64'
         type: string
         default: ''
   workflow_call:

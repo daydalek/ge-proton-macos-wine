@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import subprocess
 
+MINIMUM_TAG = (0, 1, 13)
 REQUIRED = {'wine-linux-amd64.tar.gz', 'wine-linux-amd64-sources.tar.gz',
             'linux-release-manifest.json', 'linux-static-check.json',
             'linux-privacy-audit.json', 'linux-ffmpeg-capabilities.json'}
@@ -96,8 +97,11 @@ def main():
     args = parser.parse_args()
     if not args.repo or not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', args.repo):
         parser.error('Provide owner/repository')
-    if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+-linux-amd64', args.tag):
+    match = re.fullmatch(r'v([0-9]+)\.([0-9]+)\.([0-9]+)-linux-amd64', args.tag)
+    if not match:
         parser.error('Use vMAJOR.MINOR.PATCH-linux-amd64')
+    if tuple(map(int, match.groups())) < MINIMUM_TAG:
+        parser.error('Linux release tags must continue at v0.1.13-linux-amd64 or later')
     if not re.fullmatch('[0-9a-f]{40}', args.commit):
         parser.error('Provide the full recipe commit SHA')
     directory = args.directory.resolve()

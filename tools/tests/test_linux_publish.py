@@ -12,6 +12,11 @@ SPEC.loader.exec_module(publish)
 
 
 class LinuxPublishTests(unittest.TestCase):
+    def test_linux_tags_continue_the_previous_repository_sequence(self):
+        source = (ROOT / 'scripts/linux/publish.py').read_text()
+        self.assertIn('MINIMUM_TAG = (0, 1, 13)', source)
+        self.assertIn('tuple(map(int, match.groups())) < MINIMUM_TAG', source)
+
     def test_draft_hidden_by_tag_resolves_numeric_id(self):
         draft = {'id': 123, 'tag_name': 'v1.0.0-linux-amd64', 'draft': True}
         with patch.object(publish, 'api', side_effect=[None, [draft], draft]) as api:

@@ -16,7 +16,10 @@ bash scripts/build-deps.sh
 bash scripts/crossover/build.sh full
 python3 scripts/ci/make-release.py --output "${POC_RELEASE_DIR:-$project/outputs/release}"
 
-# The runtime release counter is independent of the upstream Wine version/tag.
+# Continue the published 11.0.x runtime sequence from the previous repository.
+# The last published runtime was 11.0.68; new-repository run numbers restart low.
 : "${GITHUB_RUN_NUMBER:?Set GITHUB_RUN_NUMBER for monotonically increasing runtime versions}"
-RUNTIME_VERSION="11.0.$((GITHUB_RUN_NUMBER + 1))"
+RUNTIME_VERSION_BASE="${POC_RUNTIME_VERSION_BASE:-68}"
+case "$RUNTIME_VERSION_BASE" in ''|*[!0-9]*) echo 'POC_RUNTIME_VERSION_BASE must be numeric' >&2; exit 2 ;; esac
+RUNTIME_VERSION="11.0.$((RUNTIME_VERSION_BASE + GITHUB_RUN_NUMBER))"
 python3 scripts/ci/build-libraries.py --version "$RUNTIME_VERSION" --output "${POC_RELEASE_DIR:-$project/outputs/release}"
