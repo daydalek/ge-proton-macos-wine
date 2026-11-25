@@ -1496,22 +1496,25 @@ static void macdrv_surface_destroy(struct opengl_drawable *base)
 static void make_context_current(struct macdrv_context *context, BOOL read)
 {
     macdrv_view view;
-    RECT view_rect;
+    RECT view_rect = {0};
     CGLPBufferObj pbuffer;
 
     if (read)
     {
-        if (context->read_hwnd) NtUserGetClientRect(context->read_hwnd, &view_rect, NtUserGetDpiForWindow(context->read_hwnd));
+        if (context->read_hwnd && !NtUserGetPresentRect(context->read_hwnd, &view_rect, NtUserGetDpiForWindow(context->read_hwnd)))
+            NtUserGetClientRect(context->read_hwnd, &view_rect, NtUserGetDpiForWindow(context->read_hwnd));
         view = context->read_view;
         pbuffer = context->read_pbuffer;
     }
     else
     {
-        if (context->draw_hwnd) NtUserGetClientRect(context->draw_hwnd, &view_rect, NtUserGetDpiForWindow(context->draw_hwnd));
+        if (context->draw_hwnd && !NtUserGetPresentRect(context->draw_hwnd, &view_rect, NtUserGetDpiForWindow(context->draw_hwnd)))
+            NtUserGetClientRect(context->draw_hwnd, &view_rect, NtUserGetDpiForWindow(context->draw_hwnd));
         view = context->draw_view;
         pbuffer = context->draw_pbuffer;
     }
 
+    OffsetRect(&view_rect, -view_rect.left, -view_rect.top);
     if (view || !pbuffer)
         macdrv_make_context_current(context->context, view, cgrect_from_rect(view_rect));
     else

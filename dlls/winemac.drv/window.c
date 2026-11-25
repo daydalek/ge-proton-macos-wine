@@ -1176,7 +1176,7 @@ static void macdrv_client_surface_update(struct client_surface *client)
     struct macdrv_client_surface *surface = impl_from_client_surface(client);
     HWND hwnd = client->hwnd, toplevel = NtUserGetAncestor(hwnd, GA_ROOT);
     struct macdrv_win_data *data;
-    RECT rect;
+    RECT rect, present_rect;
 
     TRACE("%s\n", debugstr_client_surface(client));
 
@@ -1184,6 +1184,14 @@ static void macdrv_client_surface_update(struct client_surface *client)
     NtUserMapWindowPoints(hwnd, toplevel, (POINT *)&rect, 2, NtUserGetWinMonitorDpi(toplevel, MDT_RAW_DPI));
 
     if (!(data = get_win_data(toplevel))) return;
+    /* An exclusive fullscreen client is presented into the host monitor rect.
+     * Keep the native view at that size while OpenGL uses the present rect as
+     * its backing size. Child and ordinary windowed clients keep their layout. */
+    if (hwnd == toplevel && NtUserGetPresentRect(hwnd, &present_rect, NtUserGetWinMonitorDpi(hwnd, MDT_RAW_DPI)))
+    {
+        rect = data->rects.client;
+        OffsetRect(&rect, -rect.left, -rect.top);
+    }
     OffsetRect(&rect, data->rects.client.left - data->rects.visible.left, data->rects.client.top - data->rects.visible.top);
     macdrv_set_view_frame(surface->cocoa_view, cgrect_from_rect(rect));
     macdrv_set_view_superview(surface->cocoa_view, toplevel == hwnd ? NULL : data->client_view, data->cocoa_window, NULL, NULL);
@@ -1676,7 +1684,7 @@ BOOL macdrv_GetWindowStyleMasks(HWND hwnd, UINT style, UINT ex_style, UINT *styl
 void macdrv_WindowPosChanged(HWND hwnd, HWND insert_after, HWND owner_hint, UINT swp_flags,
                              const struct window_rects *new_rects, struct window_surface *surface)
 {
-    BOOL fullscreen = swp_flags & WINE_SWP_FULLSCREEN;
+    BOOL fullscreen = !!(swp_flags & WINE_SWP_FULLSCREEN);
     struct macdrv_thread_data *thread_data;
     struct macdrv_win_data *data;
     unsigned int new_style = NtUserGetWindowLongW(hwnd, GWL_STYLE);
