@@ -548,7 +548,19 @@ W32KAPI struct window_surface *window_surface_create( UINT size, const struct wi
 
     pthread_mutex_init( &surface->mutex, NULL );
 
-    memset( window_surface_get_color( surface, info ), 0xff, info->bmiHeader.biSizeImage );
+    /* A fullscreen window's surface allocation padding can be presented at
+     * the frame edges; black blends into letterboxing instead of reading as
+     * a bright border. */
+    {
+        MONITORINFO monitor_info = {.cbSize = sizeof(monitor_info)};
+        BYTE fill = 0xff;
+
+        if (NtUserGetMonitorInfo( NtUserMonitorFromWindow( hwnd, MONITOR_DEFAULTTOPRIMARY ), &monitor_info ) &&
+            rect->right - rect->left >= monitor_info.rcMonitor.right - monitor_info.rcMonitor.left &&
+            rect->bottom - rect->top >= monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top)
+            fill = 0;
+        memset( window_surface_get_color( surface, info ), fill, info->bmiHeader.biSizeImage );
+    }
 
     TRACE( "created surface %p for hwnd %p rect %s\n", surface, hwnd, wine_dbgstr_rect( &surface->rect ) );
     return surface;
