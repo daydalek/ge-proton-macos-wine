@@ -406,6 +406,9 @@ typedef struct macdrv_event {
             struct macdrv_query *query;
         }                                           query_event;
         struct {
+            bool clear_clip;
+        }                                           release_capture;
+        struct {
             macdrv_status_item  item;
             int                 button;
             bool                down;

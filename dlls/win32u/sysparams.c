@@ -5934,6 +5934,8 @@ void sysparams_init(void)
 #define IS_OPTION_TRUE(ch) \
     ((ch) == 'y' || (ch) == 'Y' || (ch) == 't' || (ch) == 'T' || (ch) == '1')
 
+    if (!get_config_key( hkey, appkey, "AllowClipCursor", buffer, sizeof(buffer) ))
+        allow_clip_cursor = IS_OPTION_TRUE( buffer[0] );
     if (!get_config_key( hkey, appkey, "GrabPointer", buffer, sizeof(buffer) ))
         grab_pointer = IS_OPTION_TRUE( buffer[0] );
     if (!get_config_key( hkey, appkey, "GrabFullscreen", buffer, sizeof(buffer) ))
@@ -5942,6 +5944,37 @@ void sysparams_init(void)
         decorated_mode = IS_OPTION_TRUE( buffer[0] );
     if (!get_config_key( hkey, appkey, "EmulateModeset", buffer, sizeof(buffer) ))
         emulate_modeset = IS_OPTION_TRUE( buffer[0] );
+    {
+        const char *env = getenv( "WINE_CLIP_CURSOR" );
+        if (env && *env)
+        {
+            if (!strcmp( env, "0" ) || !strcmp( env, "n" ) || !strcmp( env, "N" ) ||
+                !strcmp( env, "no" ) || !strcmp( env, "NO" ) ||
+                !strcmp( env, "off" ) || !strcmp( env, "OFF" ) ||
+                !strcmp( env, "false" ) || !strcmp( env, "FALSE" ))
+            {
+                allow_clip_cursor = FALSE;
+                grab_pointer = FALSE;
+                grab_fullscreen = FALSE;
+            }
+            else if (IS_OPTION_TRUE( env[0] ) || !strcmp( env, "on" ) || !strcmp( env, "ON" ) ||
+                     !strcmp( env, "auto" ) || !strcmp( env, "AUTO" ))
+            {
+                allow_clip_cursor = TRUE;
+            }
+        }
+        env = getenv( "WINE_EMULATE_MODESET" );
+        if (env && *env)
+        {
+            if (IS_OPTION_TRUE( env[0] ) || !strcmp( env, "on" ) || !strcmp( env, "ON" ))
+                emulate_modeset = TRUE;
+            else if (!strcmp( env, "0" ) || !strcmp( env, "n" ) || !strcmp( env, "N" ) ||
+                     !strcmp( env, "no" ) || !strcmp( env, "NO" ) ||
+                     !strcmp( env, "off" ) || !strcmp( env, "OFF" ) ||
+                     !strcmp( env, "false" ) || !strcmp( env, "FALSE" ))
+                emulate_modeset = FALSE;
+        }
+    }
 
 #undef IS_OPTION_TRUE
 

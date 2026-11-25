@@ -407,6 +407,7 @@ static const KBDTABLES kbdus_tables =
 static LONG clipping_cursor; /* clipping thread counter */
 static LONG enable_mouse_in_pointer = -1;
 
+BOOL allow_clip_cursor = TRUE;
 BOOL grab_pointer = TRUE;
 BOOL grab_fullscreen = FALSE;
 
@@ -2679,6 +2680,7 @@ BOOL clip_fullscreen_window( HWND hwnd, BOOL reset )
     UINT ctx;
     BOOL ret;
 
+    if (!allow_clip_cursor || !grab_pointer) return FALSE;
     if (hwnd == NtUserGetDesktopWindow()) return FALSE;
     if (hwnd != NtUserGetForegroundWindow()) return FALSE;
 
@@ -2764,7 +2766,8 @@ BOOL process_wine_clipcursor( HWND hwnd, UINT flags, BOOL reset )
         return user_driver->pClipCursor( NULL, TRUE );
     }
 
-    if (!grab_pointer) return TRUE;
+    if (!allow_clip_cursor || !grab_pointer)
+        return was_clipping ? user_driver->pClipCursor( NULL, FALSE ) : TRUE;
 
     /* we are clipping if the clip rectangle is smaller than the screen */
     get_clip_cursor( &rect, 0, MDT_RAW_DPI );
@@ -2781,6 +2784,40 @@ BOOL process_wine_clipcursor( HWND hwnd, UINT flags, BOOL reset )
     InterlockedIncrement( &clipping_cursor );
     thread_info->clipping_cursor = TRUE;
     return TRUE;
+}
+
+void sync_window_cursor_clip( HWND hwnd, const struct window_rects *old_rects,
+                              const struct window_rects *new_rects )
+{
+    struct window_rects new_raw;
+    RECT clip_rect, virtual_rect, intersect;
+    HWND foreground;
+
+    if (EqualRect( &old_rects->window, &new_rects->window ) &&
+        EqualRect( &old_rects->client, &new_rects->client ))
+        return;
+    if (NtUserGetAncestor( hwnd, GA_PARENT ) != NtUserGetDesktopWindow()) return;
+    if (!(NtUserGetWindowLongW( hwnd, GWL_STYLE ) & WS_VISIBLE)) return;
+
+    foreground = NtUserGetForegroundWindow();
+    if (foreground != hwnd && NtUserGetAncestor( foreground, GA_ROOT ) != hwnd) return;
+
+    virtual_rect = get_virtual_screen_rect( 0, MDT_RAW_DPI );
+    if (!get_clip_cursor( &clip_rect, 0, MDT_RAW_DPI ) || EqualRect( &clip_rect, &virtual_rect ))
+        return;
+
+    new_raw = map_window_rects_virt_to_raw( *new_rects, get_thread_dpi() );
+    if (EqualRect( &clip_rect, &new_raw.client ) || EqualRect( &clip_rect, &new_raw.window ))
+        return;
+
+    if ((clip_rect.right - clip_rect.left > 16 || clip_rect.bottom - clip_rect.top > 16) ||
+        !intersect_rect( &intersect, &clip_rect, &new_raw.client ))
+    {
+        TRACE( "clearing stale cursor clip %s for moved/resized win %p -> %s\n",
+               wine_dbgstr_rect( &clip_rect ), hwnd, wine_dbgstr_rect( &new_raw.client ) );
+        NtUserClipCursor( NULL );
+        clip_fullscreen_window( hwnd, TRUE );
+    }
 }
 
 /**********************************************************************
@@ -2811,8 +2848,17 @@ BOOL WINAPI NtUserClipCursor( const RECT *rect )
             rect = &new_rect;
         }
         if (rect->left > rect->right || rect->top > rect->bottom) return FALSE;
-        new_rect = map_rect_virt_to_raw( *rect, dpi );
-        rect = &new_rect;
+        if (!allow_clip_cursor)
+        {
+            TRACE( "Ignoring cursor clip %s due to AllowClipCursor/WINE_CLIP_CURSOR\n",
+                   wine_dbgstr_rect(rect) );
+            rect = NULL;
+        }
+        else
+        {
+            new_rect = map_rect_virt_to_raw( *rect, dpi );
+            rect = &new_rect;
+        }
     }
 
     SERVER_START_REQ( set_cursor )

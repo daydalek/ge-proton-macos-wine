@@ -478,10 +478,52 @@ static void scale_rect_for_retina_mode(BOOL mode, CGRect *cursorClipRect)
         [ownerWindow setMouseConfinementRect:clipRectInWindowCoords];
 
         clippingWindowNumber = ownerWindow.windowNumber;
+        clippingWindowFrame = [ownerWindow frame];
         cursorClipRect = rect;
         clippingCursor = TRUE;
 
         return TRUE;
+    }
+
+    - (BOOL) isClippingUpToDate
+    {
+        if (!clippingCursor)
+            return FALSE;
+        WineWindow *ownerWindow = [[WineApplicationController sharedController] frontWineWindow];
+        if (!ownerWindow || ownerWindow.windowNumber != clippingWindowNumber)
+            return FALSE;
+        return NSEqualRects([ownerWindow frame], clippingWindowFrame);
+    }
+
+    - (void) refreshClipping
+    {
+        if (!clippingCursor)
+            return;
+
+        NSWindow *oldWindow = [NSApp windowWithWindowNumber:clippingWindowNumber];
+        WineWindow *ownerWindow = [[WineApplicationController sharedController] frontWineWindow];
+        if (!ownerWindow)
+        {
+            [oldWindow setMouseConfinementRect:NSZeroRect];
+            clippingCursor = FALSE;
+            return;
+        }
+
+        NSRect clipRectInWindowCoords = [WineConfinementClipCursorHandler rectForScreenRect:cursorClipRect
+                                                                                   inWindow:ownerWindow];
+        if (oldWindow && oldWindow != ownerWindow)
+            [oldWindow setMouseConfinementRect:NSZeroRect];
+
+        if (NSIsEmptyRect(clipRectInWindowCoords))
+        {
+            [ownerWindow setMouseConfinementRect:NSZeroRect];
+            clippingCursor = FALSE;
+            return;
+        }
+
+        [ownerWindow setMouseConfinementRect:clipRectInWindowCoords];
+        clippingWindowNumber = ownerWindow.windowNumber;
+        clippingWindowFrame = [ownerWindow frame];
     }
 
     - (BOOL) stopClippingCursor
@@ -502,6 +544,7 @@ static void scale_rect_for_retina_mode(BOOL mode, CGRect *cursorClipRect)
     - (void) setRetinaMode:(BOOL)mode
     {
         scale_rect_for_retina_mode(mode, &cursorClipRect);
+        [self refreshClipping];
     }
 
 @end

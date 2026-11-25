@@ -55,6 +55,10 @@ static NSString* const WineExternalQuitNotificationSourcePIDKey = @"SourcePID";
 static NSString* const WineExternalQuitNotificationWineConfigDirKey = @"WineConfigDir";
 static NSString* const WineExternalQuitNotificationWinePrefixKey = @"WinePrefix";
 
+static NSString* const WineExternalReleaseMouseCaptureNotification = @"WineExternalReleaseMouseCaptureNotification";
+static NSString* const WineExternalReleaseMouseCaptureResyncKey = @"ResyncWindow";
+static NSString* const WineExternalReleaseMouseCaptureWinePrefixKey = @"WinePrefix";
+
 static BOOL regionPickerClipSuspended;
 static CGRect regionPickerPendingClip;
 
@@ -1349,7 +1353,9 @@ static NSString* WineLocalizedString(unsigned int stringID)
                 clipCursorHandler = [[WineEventTapClipCursorHandler alloc] init];
         }
 
-        if (self.clippingCursor && CGRectEqualToRect(rect, clipCursorHandler.cursorClipRect))
+        if (self.clippingCursor && CGRectEqualToRect(rect, clipCursorHandler.cursorClipRect) &&
+            (![clipCursorHandler respondsToSelector:@selector(isClippingUpToDate)] ||
+             [clipCursorHandler isClippingUpToDate]))
             return TRUE;
 
         if (![clipCursorHandler startClippingCursor:rect])
@@ -1382,6 +1388,12 @@ static NSString* WineLocalizedString(unsigned int stringID)
     - (BOOL) clippingCursor
     {
         return clipCursorHandler.clippingCursor;
+    }
+
+    - (void) refreshCursorClipping
+    {
+        if (self.clippingCursor && [clipCursorHandler respondsToSelector:@selector(refreshClipping)])
+            [clipCursorHandler refreshClipping];
     }
 
     - (void) suspendClippingForRegionPicker
@@ -2119,6 +2131,12 @@ static NSString* WineLocalizedString(unsigned int stringID)
                   object:nil
       suspensionBehavior:NSNotificationSuspensionBehaviorDeliverImmediately];
 
+        [dnc addObserver:self
+                selector:@selector(handleExternalReleaseMouseCapture:)
+                    name:WineExternalReleaseMouseCaptureNotification
+                  object:nil
+      suspensionBehavior:NSNotificationSuspensionBehaviorDeliverImmediately];
+
         [nc addObserverForName:WineWillShowPermissionDialogNotification
                         object:nil
                          queue:[NSOperationQueue mainQueue]
@@ -2425,6 +2443,50 @@ static NSString* WineLocalizedString(unsigned int stringID)
         return ret;
      }
 
+    - (void) handleExternalReleaseMouseCapture:(NSNotification*)note
+    {
+        if (![NSThread isMainThread])
+        {
+            dispatch_async(dispatch_get_main_queue(), ^{ [self handleExternalReleaseMouseCapture:note]; });
+            return;
+        }
+
+        NSString* targetPrefix = note.userInfo[WineExternalReleaseMouseCaptureWinePrefixKey];
+        if ([targetPrefix length])
+        {
+            NSString* myPrefix = [NSProcessInfo processInfo].environment[@"WINEPREFIX"];
+            if ([myPrefix length] && ![myPrefix isEqualToString:targetPrefix])
+                return;
+        }
+
+        BOOL resync = [note.userInfo[WineExternalReleaseMouseCaptureResyncKey] boolValue];
+
+        [self stopClippingCursor];
+        CGAssociateMouseAndMouseCursorPosition(true);
+        [self unhideCursor];
+        forceNextMouseMoveAbsolute = TRUE;
+        [self releaseMouseCapture];
+
+        for (NSWindow* win in [NSApp windows])
+        {
+            if ([win respondsToSelector:@selector(setMouseConfinementRect:)])
+                [(id)win setMouseConfinementRect:NSZeroRect];
+            if ([win isKindOfClass:[WineWindow class]] && [win isVisible])
+            {
+                WineWindow* wineWin = (WineWindow*)win;
+                macdrv_event* event = macdrv_create_event(RELEASE_CAPTURE, wineWin);
+                event->release_capture.clear_clip = true;
+                [wineWin.queue postEvent:event];
+                macdrv_release_event(event);
+                if (resync)
+                    [wineWin windowDidResize:nil];
+            }
+        }
+
+        if (resync)
+            [self sendDisplaysChanged:TRUE];
+    }
+
     - (void) releaseMouseCapture
     {
         // This might be invoked on a background thread by the distributed
@@ -2526,6 +2588,7 @@ static NSString* WineLocalizedString(unsigned int stringID)
         primaryScreenHeightValid = FALSE;
         [self sendDisplaysChanged:FALSE];
         [self adjustWindowLevels];
+        [self refreshCursorClipping];
 
         // When the display configuration changes, the cursor position may jump.
         // Accumulated mouse movement deltas are invalidated.  Make sure the next

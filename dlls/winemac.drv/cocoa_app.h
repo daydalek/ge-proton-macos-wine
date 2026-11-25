@@ -114,6 +114,7 @@ enum {
 
     - (void) suspendClippingForRegionPicker;
     - (void) resumeClippingForRegionPicker:(BOOL)ownerVisible;
+    - (void) refreshCursorClipping;
 
     + (WineApplicationController*) sharedController;
 

@@ -40,6 +40,8 @@
      * -clipCursorLocation, and the cursor will be warped normally.
      */
     - (BOOL) setCursorPosition:(CGPoint)pos;
+    - (BOOL) isClippingUpToDate;
+    - (void) refreshClipping;
 
 @end
 
@@ -65,6 +67,7 @@
      * mouseConfinementRect set). Using this rather than a WineWindow* to avoid
      * tricky retain situations. */
     NSInteger clippingWindowNumber;
+    NSRect clippingWindowFrame;
 }
 
     /* Returns true if the API in use by this handler is available. */

@@ -89,6 +89,7 @@ extern BOOL register_imm_window( HWND hwnd );
 extern void unregister_imm_window( HWND hwnd );
 
 /* input.c */
+extern BOOL allow_clip_cursor;
 extern BOOL grab_pointer;
 extern BOOL grab_fullscreen;
 extern BOOL is_mouse_in_pointer_enabled( HWND hwnd );
@@ -107,6 +108,8 @@ extern void update_mouse_tracking_info( HWND hwnd );
 extern void update_current_mouse_window( HWND hwnd, INT hittest, POINT pos );
 extern BOOL process_wine_clipcursor( HWND hwnd, UINT flags, BOOL reset );
 extern BOOL clip_fullscreen_window( HWND hwnd, BOOL reset );
+extern void sync_window_cursor_clip( HWND hwnd, const struct window_rects *old_rects,
+                                     const struct window_rects *new_rects );
 extern USHORT map_scan_to_kbd_vkey( USHORT scan, HKL layout );
 
 /* menu.c */

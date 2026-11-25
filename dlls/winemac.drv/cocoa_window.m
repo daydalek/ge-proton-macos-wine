@@ -3244,6 +3244,8 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
     {
         enteringFullScreen = FALSE;
         enteredFullScreenTime = [[NSProcessInfo processInfo] systemUptime];
+        [self windowDidResize:nil];
+        [[WineApplicationController sharedController] refreshCursorClipping];
         if (pendingOrderOut)
             [self doOrderOut];
     }
@@ -3336,6 +3338,7 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
 
         [[[self contentView] inputContext] invalidateCharacterCoordinates];
         [self updateFullscreen];
+        [[WineApplicationController sharedController] refreshCursorClipping];
     }
 
     - (void)windowDidResize:(NSNotification *)notification

@@ -4024,7 +4024,10 @@ BOOL set_window_pos( WINDOWPOS *winpos, int parent_x, int parent_y )
         DWORD style = NtUserGetWindowLongW( winpos->hwnd, GWL_STYLE );
 
         if ((style & (WS_CHILD | WS_CAPTION | WS_MINIMIZE | WS_VISIBLE)) == WS_VISIBLE &&
-            get_present_rect( winpos->hwnd, &present_rect, get_thread_dpi() ))
+            get_present_rect( winpos->hwnd, &present_rect, get_thread_dpi() ) &&
+            ((winpos->flags & SWP_NOZORDER) || winpos->hwndInsertAfter != HWND_NOTOPMOST) &&
+            ((winpos->flags & SWP_NOMOVE) ||
+             (new_rects.window.left <= present_rect.left && new_rects.window.top <= present_rect.top)))
         {
             new_rects.window = present_rect;
             winpos->x = present_rect.left;
@@ -4059,15 +4062,21 @@ BOOL set_window_pos( WINDOWPOS *winpos, int parent_x, int parent_y )
      * geometry, a visible, restored captioned window smaller than the monitor
      * indicates a return to windowed mode. Fullscreen setup can use a logical
      * size smaller than the host monitor and must retain its present rect. */
-    if ((winpos->flags & (SWP_NOMOVE | SWP_NOSIZE)) != (SWP_NOMOVE | SWP_NOSIZE))
+    if ((winpos->flags & (SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED)) != (SWP_NOMOVE | SWP_NOSIZE))
     {
         MONITORINFO monitor_info = monitor_info_from_rect( new_rects.window, get_thread_dpi() );
         WND *win = get_win_ptr( winpos->hwnd );
 
         if (win && win != WND_DESKTOP && win != WND_OTHER_PROCESS)
         {
+            BOOL leaving_fullscreen = (win->dwStyle & WS_CAPTION) == WS_CAPTION ||
+                                      (!(winpos->flags & SWP_NOZORDER) && winpos->hwndInsertAfter == HWND_NOTOPMOST) ||
+                                      (!(winpos->flags & SWP_NOMOVE) &&
+                                       (new_rects.window.left > win->present_rect.left ||
+                                        new_rects.window.top > win->present_rect.top));
+
             if (!IsRectEmpty( &win->present_rect ) &&
-                (win->dwStyle & WS_CAPTION) == WS_CAPTION &&
+                leaving_fullscreen &&
                 (win->dwStyle & (WS_VISIBLE | WS_MINIMIZE)) == WS_VISIBLE &&
                 !is_fullscreen( &monitor_info, &new_rects.window ))
             {
@@ -4139,6 +4148,8 @@ BOOL set_window_pos( WINDOWPOS *winpos, int parent_x, int parent_y )
             erase_now(winpos->hwnd, 0);
         }
     }
+
+    sync_window_cursor_clip( winpos->hwnd, &old_rects, &new_rects );
 
       /* And last, send the WM_WINDOWPOSCHANGED message */
 

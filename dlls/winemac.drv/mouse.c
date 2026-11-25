@@ -955,6 +955,13 @@ void macdrv_release_capture(HWND hwnd, const macdrv_event *event)
     TRACE("win %p/%p thread_data->capture_window %p GetCapture() %p in %p\n", hwnd,
           event->window, thread_data->capture_window, capture, capture_top);
 
+    if (event->release_capture.clear_clip)
+    {
+        NtUserClipCursor(NULL);
+        if (hwnd)
+            NtUserPostMessage(hwnd, WM_WINE_CLIPCURSOR, SET_CURSOR_NOCLIP, TRUE);
+    }
+
     if (event->window == thread_data->capture_window && hwnd == capture_top)
     {
         NtUserReleaseCapture();
