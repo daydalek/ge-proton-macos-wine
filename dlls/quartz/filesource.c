@@ -196,13 +196,16 @@ static BOOL is_asf_stream(HANDLE file)
     return !memcmp(header, asf_header_guid, sizeof(header));
 }
 
-BOOL get_media_type(const WCHAR *filename, GUID *majortype, GUID *subtype, GUID *source_clsid)
+BOOL get_media_type(const WCHAR *filename, GUID *majortype, GUID *subtype, GUID *source_clsid,
+        HANDLE *ret_file)
 {
     WCHAR extensions_path[278] = L"Media Type\\Extensions\\";
     DWORD majortype_idx, size;
     const WCHAR *ext;
     HKEY parent_key;
     HANDLE file;
+
+    if (ret_file) *ret_file = INVALID_HANDLE_VALUE;
 
     if ((ext = wcsrchr(filename, '.')))
     {
@@ -236,6 +239,10 @@ BOOL get_media_type(const WCHAR *filename, GUID *majortype, GUID *subtype, GUID 
         return FALSE;
     }
 
+    /* Keep archive-backed streams alive until the source filter has opened its
+     * own handle. Some legacy VFS hooks discard cached data at the last close. */
+    if (ret_file) *ret_file = file;
+
     if (is_asf_stream(file))
     {
         /* Persona 4 Arena Ultimax stores its intro ASF without an extension.
@@ -248,13 +255,13 @@ BOOL get_media_type(const WCHAR *filename, GUID *majortype, GUID *subtype, GUID 
         if (source_clsid)
             *source_clsid = CLSID_WMAsfReader;
 
-        CloseHandle(file);
+        if (!ret_file) CloseHandle(file);
         return TRUE;
     }
 
     if (RegOpenKeyExW(HKEY_CLASSES_ROOT, L"Media Type", 0, KEY_READ, &parent_key))
     {
-        CloseHandle(file);
+        if (!ret_file) CloseHandle(file);
         return FALSE;
     }
 
@@ -322,7 +329,7 @@ BOOL get_media_type(const WCHAR *filename, GUID *majortype, GUID *subtype, GUID 
                 RegCloseKey(subtype_key);
                 RegCloseKey(majortype_key);
                 RegCloseKey(parent_key);
-                CloseHandle(file);
+                if (!ret_file) CloseHandle(file);
                 return TRUE;
             }
 
@@ -334,7 +341,7 @@ BOOL get_media_type(const WCHAR *filename, GUID *majortype, GUID *subtype, GUID 
     }
 
     RegCloseKey(parent_key);
-    CloseHandle(file);
+    if (!ret_file) CloseHandle(file);
     return FALSE;
 }
 
@@ -549,7 +556,7 @@ static HRESULT WINAPI FileSource_Load(IFileSourceFilter * iface, LPCOLESTR pszFi
     if (!pmt)
     {
         CopyMediaType(&This->mt, &default_mt);
-        if (get_media_type(pszFileName, &This->mt.majortype, &This->mt.subtype, NULL))
+        if (get_media_type(pszFileName, &This->mt.majortype, &This->mt.subtype, NULL, NULL))
         {
             TRACE("Found major type %s, subtype %s.\n",
                     debugstr_guid(&This->mt.majortype), debugstr_guid(&This->mt.subtype));

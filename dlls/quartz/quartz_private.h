@@ -76,7 +76,7 @@ HRESULT wave_parser_create(IUnknown *outer, IUnknown **out);
 extern const char * qzdebugstr_guid(const GUID * id);
 extern void video_unregister_windowclass(void);
 
-BOOL get_media_type(const WCHAR *filename, GUID *majortype, GUID *subtype, GUID *source_clsid);
+BOOL get_media_type(const WCHAR *filename, GUID *majortype, GUID *subtype, GUID *source_clsid, HANDLE *ret_file);
 
 struct video_window
 {
