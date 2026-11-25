@@ -6810,6 +6810,26 @@ HRESULT ddraw_surface_create(struct ddraw *ddraw, const DDSURFACEDESC2 *surface_
                 return hr_ddraw_from_wined3d(hr);
             }
         }
+        else if (ddraw->wined3d_swapchain)
+        {
+            struct wined3d_swapchain_desc swapchain_desc;
+
+            /* Windowed blits address the swapchain front buffer in screen
+             * coordinates. SetCooperativeLevel() recreates the swapchain
+             * before it restores the display mode, so a swapchain created
+             * while leaving exclusive mode keeps that mode's size and
+             * rejects blits outside of it. */
+            wined3d_swapchain_get_desc(ddraw->wined3d_swapchain, &swapchain_desc);
+            if ((swapchain_desc.backbuffer_width != mode.width || swapchain_desc.backbuffer_height != mode.height)
+                    && FAILED(hr = wined3d_swapchain_resize_buffers(ddraw->wined3d_swapchain, 0,
+                    mode.width, mode.height, swapchain_desc.backbuffer_format,
+                    swapchain_desc.multisample_type, swapchain_desc.multisample_quality)))
+            {
+                ERR("Failed to resize swapchain buffers, hr %#lx.\n", hr);
+                free(texture);
+                return hr_ddraw_from_wined3d(hr);
+            }
+        }
     }
 
     if ((desc->ddsCaps.dwCaps & DDSCAPS_3DDEVICE) && (ddraw->flags & DDRAW_NO3D))
