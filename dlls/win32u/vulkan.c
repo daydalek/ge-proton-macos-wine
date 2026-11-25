@@ -28,6 +28,11 @@
 #include <pthread.h>
 #include <unistd.h>
 
+#ifdef __APPLE__
+#include <mach/mach.h>
+#include <mach/mach_vm.h>
+#endif
+
 #include "ntstatus.h"
 #define WIN32_NO_STATUS
 #include "win32u_private.h"
@@ -528,9 +533,17 @@ static VkResult init_physical_device( struct vulkan_physical_device *physical_de
         VkPhysicalDeviceProperties2 props = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, .pNext = &host_mem_props};
 
         instance->p_vkGetPhysicalDeviceProperties2KHR( host_physical_device, &props );
+#ifdef __APPLE__
+        /* On Apple Silicon macOS, importing Wine host memory as no-copy MTLBuffers triggers
+         * kIOGPUCommandBufferCallbackErrorOutOfMemory. Disable host memory import for 32-bit
+         * WoW64 processes and route mappings through Darwin mach_vm_remap low-address aliasing. */
+        physical_device->external_memory_align = 0;
+        TRACE( "Disabled VK_EXT_external_memory_host for macOS WoW64; using mach_vm_remap\n" );
+#else
         physical_device->external_memory_align = host_mem_props.minImportedHostPointerAlignment;
         if (physical_device->external_memory_align) WARN( "Not using VK_EXT_external_memory_host for memory mapping\n" );
         else TRACE( "Using VK_EXT_external_memory_host for memory mapping with alignment: %u\n", physical_device->external_memory_align );
+#endif
     }
 
     driver_funcs->p_map_device_extensions( &extensions );
@@ -1039,7 +1052,7 @@ static void win32u_vkFreeMemory( VkDevice client_device, VkDeviceMemory client_m
     if (!client_memory) return;
     memory = device_memory_from_handle( client_memory );
 
-    if (memory->vm_map && !physical_device->external_memory_align)
+    if (memory->vm_map && physical_device->map_placed_align && device->p_vkUnmapMemory2KHR)
     {
         const VkMemoryUnmapInfoKHR info =
         {
@@ -1048,6 +1061,10 @@ static void win32u_vkFreeMemory( VkDevice client_device, VkDeviceMemory client_m
             .flags = VK_MEMORY_UNMAP_RESERVE_BIT_EXT,
         };
         device->p_vkUnmapMemory2KHR( device->host.device, &info );
+    }
+    else if (memory->vm_map && !physical_device->external_memory_align)
+    {
+        device->p_vkUnmapMemory( device->host.device, memory->obj.host.device_memory );
     }
 
     device->p_vkFreeMemory( device->host.device, memory->obj.host.device_memory, NULL );
@@ -1178,10 +1195,54 @@ static VkResult win32u_vkMapMemory2KHR( VkDevice client_device, const VkMemoryMa
 #ifdef _WIN64
     if (NtCurrentTeb()->WowTebOffset && res == VK_SUCCESS && (UINT_PTR)*data >> 32)
     {
+#ifdef __APPLE__
+        void *host_ptr = *data;
+        vm_map_address_t base = (vm_map_address_t)(UINT_PTR)host_ptr & ~PAGE_MASK;
+        SIZE_T length = map_info->size == VK_WHOLE_SIZE ? memory->size - map_info->offset : map_info->size;
+        SIZE_T mapping_size = (length + ((vm_map_offset_t)(UINT_PTR)host_ptr - base) + PAGE_MASK) & ~PAGE_MASK;
+        SIZE_T alloc_size = mapping_size;
+        mach_vm_address_t lowaddr;
+        vm_prot_t cur_prot, max_prot;
+        kern_return_t kr;
+        void *vm_ptr = NULL;
+
+        if (!NtAllocateVirtualMemory( GetCurrentProcess(), &vm_ptr, zero_bits,
+                                      &alloc_size, MEM_COMMIT, PAGE_READWRITE ))
+        {
+            lowaddr = (UINT_PTR)vm_ptr;
+            if ((kr = mach_vm_remap( mach_task_self(), &lowaddr, mapping_size, 0,
+                                     VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+                                     mach_task_self(), base, FALSE,
+                                     &cur_prot, &max_prot, VM_INHERIT_DEFAULT )) == KERN_SUCCESS)
+            {
+                memory->vm_map = vm_ptr;
+                *data = (char *)memory->vm_map + ((vm_map_offset_t)(UINT_PTR)host_ptr - base);
+                TRACE( "Remapped 64-bit Vulkan mapping %p to 32-bit address %p (mapping_size %zu)\n",
+                       host_ptr, *data, mapping_size );
+            }
+            else
+            {
+                ERR( "mach_vm_remap failed: %d, releasing virtual memory\n", kr );
+                alloc_size = 0;
+                NtFreeVirtualMemory( GetCurrentProcess(), &vm_ptr, &alloc_size, MEM_RELEASE );
+                device->p_vkUnmapMemory( device->host.device, memory->obj.host.device_memory );
+                *data = NULL;
+                res = VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+        }
+        else
+        {
+            ERR( "NtAllocateVirtualMemory failed for 32-bit placement\n" );
+            device->p_vkUnmapMemory( device->host.device, memory->obj.host.device_memory );
+            *data = NULL;
+            res = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+#else
         FIXME( "returned mapping %p does not fit 32-bit pointer\n", *data );
         device->p_vkUnmapMemory( device->host.device, memory->obj.host.device_memory );
         *data = NULL;
         res = VK_ERROR_OUT_OF_HOST_MEMORY;
+#endif
     }
 #endif
 
@@ -1215,14 +1276,20 @@ static VkResult win32u_vkUnmapMemory2KHR( VkDevice client_device, const VkMemory
 
     if (!device->p_vkUnmapMemory2KHR)
     {
-        if (unmap_info->pNext || memory->vm_map) FIXME( "Not implemented\n" );
+        if (unmap_info->pNext) FIXME( "Not implemented\n" );
         device->p_vkUnmapMemory( device->host.device, memory->obj.host.device_memory );
+        if (memory->vm_map)
+        {
+            SIZE_T size = 0;
+            NtFreeVirtualMemory( GetCurrentProcess(), &memory->vm_map, &size, MEM_RELEASE );
+            memory->vm_map = NULL;
+        }
         return VK_SUCCESS;
     }
 
     info = *unmap_info;
     info.memory = memory->obj.host.device_memory;
-    if (memory->vm_map) info.flags |= VK_MEMORY_UNMAP_RESERVE_BIT_EXT;
+    if (memory->vm_map && physical_device->map_placed_align) info.flags |= VK_MEMORY_UNMAP_RESERVE_BIT_EXT;
 
     res = device->p_vkUnmapMemory2KHR( device->host.device, &info );
 
@@ -3009,6 +3076,8 @@ static void vulkan_init_once(void)
     {
 #ifdef SONAME_LIBVULKAN
         libvulkan = SONAME_LIBVULKAN;
+#elif defined(__APPLE__)
+        libvulkan = "libMoltenVK.dylib";
 #else
         return;
 #endif
