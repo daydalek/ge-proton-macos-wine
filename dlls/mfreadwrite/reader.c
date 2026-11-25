@@ -191,6 +191,7 @@ struct source_reader
     DWORD stream_count;
     unsigned int flags;
     BOOL unthrottled_audio_output;
+    BOOL preserve_seek_timestamps;
     unsigned int seek_serial;
     unsigned int completed_seek_serial;
     DWORD queue;
@@ -615,7 +616,8 @@ static HRESULT source_reader_queue_sample(struct source_reader *reader, struct m
 
     if (stream->is_new_stream)
     {
-        if (!(reader->flags & SOURCE_READER_PRESERVE_SOURCE_TIMESTAMPS) && timestamp > startup_threshold)
+        if (!(reader->flags & SOURCE_READER_PRESERVE_SOURCE_TIMESTAMPS)
+                && !reader->preserve_seek_timestamps && timestamp > startup_threshold)
         {
             stream->timestamp_adjust = -timestamp;
             source_reader_adjust_queued_stream_timestamps(reader, stream, stream->timestamp_adjust);
@@ -3430,6 +3432,9 @@ static HRESULT WINAPI src_reader_SetCurrentPosition(IMFSourceReaderEx *iface, RE
             }
         }
     }
+
+    if (SUCCEEDED(hr))
+        reader->preserve_seek_timestamps = position->vt == VT_I8 && position->hVal.QuadPart != 0;
 
     LeaveCriticalSection(&reader->cs);
 
