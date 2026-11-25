@@ -21,6 +21,7 @@
 #include "windows.h"
 #include "ole2.h"
 #include "dshow.h"
+#include "ocidl.h"
 #include "wmp.h"
 
 #define TID_LIST \
@@ -77,8 +78,10 @@ struct WindowsMediaPlayer {
     IOleInPlaceObjectWindowless IOleInPlaceObjectWindowless_iface;
     IConnectionPointContainer IConnectionPointContainer_iface;
     IOleControl IOleControl_iface;
+    IObjectWithSite IObjectWithSite_iface;
     IWMPPlayer4 IWMPPlayer4_iface;
     IWMPPlayer IWMPPlayer_iface;
+    IWMPPlayer2 IWMPPlayer2_iface;
     IWMPSettings IWMPSettings_iface;
     IWMPControls IWMPControls_iface;
     IWMPNetwork IWMPNetwork_iface;
@@ -106,9 +109,18 @@ struct WindowsMediaPlayer {
     IMediaEvent* media_event;
     IMediaSeeking* media_seeking;
     IBasicAudio* basic_audio;
+    IVideoWindow* video_window;
 
     /* Async event notification */
     HWND msg_window;
+
+    /* Playback & Display State */
+    WMPPlayState play_state;
+    WMPOpenState open_state;
+    VARIANT_BOOL stretch_to_fit;
+    VARIANT_BOOL windowless;
+    VARIANT_BOOL enable_context_menu;
+    VARIANT_BOOL enabled;
 };
 
 BOOL init_player(WindowsMediaPlayer*);

@@ -61,7 +61,6 @@ static LRESULT WINAPI wmp_wnd_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
     switch(msg) {
     case WM_PAINT: {
         PAINTSTRUCT ps;
-        HFONT font;
         RECT rect;
         HDC hdc;
 
@@ -69,25 +68,15 @@ static LRESULT WINAPI wmp_wnd_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
 
         GetClientRect(hwnd, &rect);
         hdc = BeginPaint(hwnd, &ps);
-
-        SelectObject(hdc, GetStockObject(DC_BRUSH));
-        SetDCBrushColor(hdc, RGB(255,0,0));
-        SetBkColor(hdc, RGB(255,0,0));
-
-        font = CreateFontA(25,0,0,0,400,0,0,0,ANSI_CHARSET,0,0,DEFAULT_QUALITY,DEFAULT_PITCH,NULL);
-        SelectObject(hdc, font);
-
-        Rectangle(hdc, rect.left, rect.top, rect.right, rect.bottom);
-        DrawTextA(hdc, "FIXME: WMP", -1, &rect, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
-
-        DeleteObject(font);
+        FillRect(hdc, &rect, (HBRUSH)GetStockObject(BLACK_BRUSH));
         EndPaint(hwnd, &ps);
         break;
     }
+    case WM_ERASEBKGND:
+        return 1;
     }
 
     return DefWindowProcW(hwnd, msg, wParam, lParam);
-
 }
 
 static ATOM wmp_class;
@@ -144,7 +133,6 @@ static HRESULT activate_inplace(WindowsMediaPlayer *This)
     hres = IOleClientSite_QueryInterface(This->client_site, &IID_IOleInPlaceSiteWindowless, (void**)&ipsite_windowless);
     if(SUCCEEDED(hres)) {
         hres = IOleInPlaceSiteWindowless_CanWindowlessActivate(ipsite_windowless);
-        IOleInPlaceSiteWindowless_Release(ipsite_windowless);
         if(hres == S_OK)
             FIXME("Windowless activation not supported\n");
         ipsiteex = (IOleInPlaceSiteEx*)ipsite_windowless;
@@ -176,6 +164,15 @@ static HRESULT activate_inplace(WindowsMediaPlayer *This)
     This->hwnd = create_wmp_window(This, &posrect);
     if(!This->hwnd)
         return E_FAIL;
+
+    EnableWindow(This->hwnd, This->enabled != VARIANT_FALSE);
+
+    if(This->video_window) {
+        IVideoWindow_put_Owner(This->video_window, (OAHWND)This->hwnd);
+        IVideoWindow_put_WindowStyle(This->video_window, WS_CHILD | WS_CLIPSIBLINGS);
+        IVideoWindow_SetWindowPosition(This->video_window, 0, 0, posrect.right-posrect.left, posrect.bottom-posrect.top);
+        IVideoWindow_put_Visible(This->video_window, OATRUE);
+    }
 
     IOleClientSite_ShowObject(This->client_site);
     return S_OK;
@@ -261,9 +258,18 @@ static HRESULT WINAPI OleObject_QueryInterface(IOleObject *iface, REFIID riid, v
     }else if(IsEqualGUID(riid, &IID_IWMPPlayer4)) {
         TRACE("(%p)->(IID_IWMPPlayer4 %p)\n", This, ppv);
         *ppv = &This->IWMPPlayer4_iface;
+    }else if(IsEqualGUID(riid, &IID_IWMPPlayer2)) {
+        TRACE("(%p)->(IID_IWMPPlayer2 %p)\n", This, ppv);
+        *ppv = &This->IWMPPlayer2_iface;
     }else if(IsEqualGUID(riid, &IID_IWMPPlayer)) {
         TRACE("(%p)->(IID_IWMPPlayer %p)\n", This, ppv);
         *ppv = &This->IWMPPlayer_iface;
+    }else if(IsEqualGUID(riid, &IID_IDispatch)) {
+        TRACE("(%p)->(IID_IDispatch %p)\n", This, ppv);
+        *ppv = &This->IWMPPlayer2_iface;
+    }else if(IsEqualGUID(riid, &IID_IObjectWithSite)) {
+        TRACE("(%p)->(IID_IObjectWithSite %p)\n", This, ppv);
+        *ppv = &This->IObjectWithSite_iface;
     }else if(IsEqualGUID(riid, &IID_IWMPSettings)) {
         TRACE("(%p)->(IID_IWMPSettings %p)\n", This, ppv);
         *ppv = &This->IWMPSettings_iface;
@@ -319,6 +325,10 @@ static HRESULT WINAPI OleObject_SetClientSite(IOleObject *iface, IOleClientSite 
     HRESULT hres;
 
     TRACE("(%p)->(%p)\n", This, pClientSite);
+
+    /* ATL sets the site again through IObjectWithSite after activation. */
+    if (This->client_site == pClientSite)
+        return S_OK;
 
     release_client_site(This);
     if(!pClientSite)
@@ -639,6 +649,11 @@ static HRESULT WINAPI OleInPlaceObjectWindowless_SetObjectRects(IOleInPlaceObjec
        SetWindowPos(This->hwnd, NULL, lprcPosRect->left, lprcPosRect->top,
                lprcPosRect->right-lprcPosRect->left, lprcPosRect->bottom-lprcPosRect->top,
                SWP_NOZORDER | SWP_NOACTIVATE);
+       if(This->video_window) {
+           IVideoWindow_SetWindowPosition(This->video_window, 0, 0,
+                   lprcPosRect->right - lprcPosRect->left,
+                   lprcPosRect->bottom - lprcPosRect->top);
+       }
     }
 
     return S_OK;
@@ -887,6 +902,73 @@ static const IPersistStreamInitVtbl PersistStreamInitVtbl = {
     PersistStreamInit_InitNew
 };
 
+static inline WindowsMediaPlayer *impl_from_IObjectWithSite(IObjectWithSite *iface)
+{
+    return CONTAINING_RECORD(iface, WindowsMediaPlayer, IObjectWithSite_iface);
+}
+
+static HRESULT WINAPI ObjectWithSite_QueryInterface(IObjectWithSite *iface, REFIID riid, void **ppv)
+{
+    WindowsMediaPlayer *This = impl_from_IObjectWithSite(iface);
+    return IOleObject_QueryInterface(&This->IOleObject_iface, riid, ppv);
+}
+
+static ULONG WINAPI ObjectWithSite_AddRef(IObjectWithSite *iface)
+{
+    WindowsMediaPlayer *This = impl_from_IObjectWithSite(iface);
+    return IOleObject_AddRef(&This->IOleObject_iface);
+}
+
+static ULONG WINAPI ObjectWithSite_Release(IObjectWithSite *iface)
+{
+    WindowsMediaPlayer *This = impl_from_IObjectWithSite(iface);
+    return IOleObject_Release(&This->IOleObject_iface);
+}
+
+static HRESULT WINAPI ObjectWithSite_SetSite(IObjectWithSite *iface, IUnknown *pUnkSite)
+{
+    WindowsMediaPlayer *This = impl_from_IObjectWithSite(iface);
+    IOleClientSite *client_site = NULL;
+
+    TRACE("(%p)->(%p)\n", This, pUnkSite);
+
+    if (pUnkSite) {
+        HRESULT hr = IUnknown_QueryInterface(pUnkSite, &IID_IOleClientSite, (void**)&client_site);
+        if (FAILED(hr))
+            return hr;
+    }
+
+    OleObject_SetClientSite(&This->IOleObject_iface, client_site);
+    if (client_site)
+        IOleClientSite_Release(client_site);
+
+    return S_OK;
+}
+
+static HRESULT WINAPI ObjectWithSite_GetSite(IObjectWithSite *iface, REFIID riid, void **ppvSite)
+{
+    WindowsMediaPlayer *This = impl_from_IObjectWithSite(iface);
+
+    TRACE("(%p)->(%s %p)\n", This, debugstr_guid(riid), ppvSite);
+
+    if (!ppvSite)
+        return E_POINTER;
+    if (!This->client_site) {
+        *ppvSite = NULL;
+        return E_FAIL;
+    }
+
+    return IOleClientSite_QueryInterface(This->client_site, riid, ppvSite);
+}
+
+static const IObjectWithSiteVtbl ObjectWithSiteVtbl = {
+    ObjectWithSite_QueryInterface,
+    ObjectWithSite_AddRef,
+    ObjectWithSite_Release,
+    ObjectWithSite_SetSite,
+    ObjectWithSite_GetSite
+};
+
 HRESULT WINAPI WMPFactory_CreateInstance(IClassFactory *iface, IUnknown *outer,
         REFIID riid, void **ppv)
 {
@@ -906,6 +988,7 @@ HRESULT WINAPI WMPFactory_CreateInstance(IClassFactory *iface, IUnknown *outer,
     wmp->IPersistStreamInit_iface.lpVtbl = &PersistStreamInitVtbl;
     wmp->IOleInPlaceObjectWindowless_iface.lpVtbl = &OleInPlaceObjectWindowlessVtbl;
     wmp->IOleControl_iface.lpVtbl = &OleControlVtbl;
+    wmp->IObjectWithSite_iface.lpVtbl = &ObjectWithSiteVtbl;
 
     wmp->ref = 1;
 
