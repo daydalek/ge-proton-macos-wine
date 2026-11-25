@@ -167,6 +167,7 @@ static UINT64 monitor_update_serial;
 static pthread_mutex_t display_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static BOOL emulate_modeset;
+static DWORD emulate_modeset_width, emulate_modeset_height;
 BOOL decorated_mode = TRUE;
 UINT64 thunk_lock_callback = 0;
 
@@ -482,6 +483,32 @@ static BOOL is_detached_mode( const DEVMODEW *mode )
            mode->dmPelsHeight == 0;
 }
 
+/* An "WxH" value in EmulateModeset/WINE_EMULATE_MODESET pins the emulated current
+ * mode, for games that fake fullscreen by maximizing to the desktop size without
+ * calling ChangeDisplaySettings. */
+static BOOL parse_emulate_modeset_dim( const char *str )
+{
+    char *end;
+    DWORD w = strtoul( str, &end, 10 ), h;
+
+    if (!w || (*end != 'x' && *end != 'X')) return FALSE;
+    h = strtoul( end + 1, &end, 10 );
+    if (!h || *end) return FALSE;
+    emulate_modeset_width = w;
+    emulate_modeset_height = h;
+    return TRUE;
+}
+
+static void apply_forced_emulate_mode( DEVMODEW *mode, const DEVMODEW *fallback )
+{
+    if (!emulate_modeset || !emulate_modeset_width || !emulate_modeset_height) return;
+    if ((!mode->dmPelsWidth || !mode->dmPelsHeight) && fallback) *mode = *fallback;
+    if (!mode->dmPelsWidth || !mode->dmPelsHeight) return;
+    mode->dmPelsWidth = emulate_modeset_width;
+    mode->dmPelsHeight = emulate_modeset_height;
+    mode->dmFields |= DM_PELSWIDTH | DM_PELSHEIGHT;
+}
+
 static BOOL write_source_mode( HKEY hkey, UINT index, const DEVMODEW *mode )
 {
     WCHAR bufferW[MAX_PATH] = {0};
@@ -710,6 +737,7 @@ static BOOL read_source_from_registry( unsigned int index, struct source *source
     source->physical = source->current;
     if (read_source_mode( hkey, WINE_ENUM_PHYSICAL_SETTINGS, &source->physical ))
         source->physical.dmSize = sizeof(source->physical);
+    apply_forced_emulate_mode( &source->current, &source->physical );
 
     /* DeviceID */
     size = query_reg_ascii_value( hkey, "GPUID", value, sizeof(buffer) );
@@ -2153,7 +2181,7 @@ static DEVMODEW *get_virtual_modes( const DEVMODEW *initial, const DEVMODEW *max
 static void add_modes( const DEVMODEW *current, UINT host_modes_count, const DEVMODEW *host_modes, void *param )
 {
     struct device_manager_ctx *ctx = param;
-    DEVMODEW dummy, physical, detached = *current, virtual, *virtual_modes = NULL;
+    DEVMODEW dummy, physical, detached = *current, virtual, pinned, *virtual_modes = NULL;
     UINT virtual_count, modes_count = host_modes_count;
     const DEVMODEW *modes = host_modes;
     struct source *source;
@@ -2186,12 +2214,14 @@ static void add_modes( const DEVMODEW *current, UINT host_modes_count, const DEV
     {
         if (!read_source_mode( source->key, ENUM_CURRENT_SETTINGS, &virtual ) || is_detached_mode( &virtual ))
             virtual = physical;
+        pinned = virtual;
+        apply_forced_emulate_mode( &pinned, &physical );
 
         if ((virtual_modes = get_virtual_modes( current, &physical, host_modes, host_modes_count, &virtual_count )))
         {
             modes_count = virtual_count;
             modes = virtual_modes;
-            current = &virtual;
+            current = &pinned;
 
             write_source_mode( source->key, WINE_ENUM_PHYSICAL_SETTINGS, &physical );
         }
@@ -2199,7 +2229,8 @@ static void add_modes( const DEVMODEW *current, UINT host_modes_count, const DEV
 
     if (current == &detached || !read_source_mode( source->key, ENUM_REGISTRY_SETTINGS, &dummy ))
         write_source_mode( source->key, ENUM_REGISTRY_SETTINGS, current );
-    write_source_mode( source->key, ENUM_CURRENT_SETTINGS, current );
+    /* Persist the unpinned mode so a non-emulated session restores the physical mode. */
+    write_source_mode( source->key, ENUM_CURRENT_SETTINGS, current == &pinned ? &virtual : current );
 
     assert( !modes_count || modes->dmDriverExtra == 0 );
     set_reg_value( source->key, modesW, REG_BINARY, modes, modes_count * sizeof(*modes) );
@@ -5943,7 +5974,14 @@ void sysparams_init(void)
     if (!get_config_key( hkey, appkey, "Decorated", buffer, sizeof(buffer) ))
         decorated_mode = IS_OPTION_TRUE( buffer[0] );
     if (!get_config_key( hkey, appkey, "EmulateModeset", buffer, sizeof(buffer) ))
-        emulate_modeset = IS_OPTION_TRUE( buffer[0] );
+    {
+        char bufferA[32];
+        DWORD i = 0;
+        while (i < ARRAY_SIZE(bufferA) - 1 && buffer[i]) { bufferA[i] = buffer[i]; i++; }
+        bufferA[i] = 0;
+        if (parse_emulate_modeset_dim( bufferA )) emulate_modeset = TRUE;
+        else emulate_modeset = IS_OPTION_TRUE( buffer[0] );
+    }
     {
         const char *env = getenv( "WINE_CLIP_CURSOR" );
         if (env && *env)
@@ -5966,7 +6004,8 @@ void sysparams_init(void)
         env = getenv( "WINE_EMULATE_MODESET" );
         if (env && *env)
         {
-            if (IS_OPTION_TRUE( env[0] ) || !strcmp( env, "on" ) || !strcmp( env, "ON" ))
+            if (parse_emulate_modeset_dim( env )) emulate_modeset = TRUE;
+            else if (IS_OPTION_TRUE( env[0] ) || !strcmp( env, "on" ) || !strcmp( env, "ON" ))
                 emulate_modeset = TRUE;
             else if (!strcmp( env, "0" ) || !strcmp( env, "n" ) || !strcmp( env, "N" ) ||
                      !strcmp( env, "no" ) || !strcmp( env, "NO" ) ||
