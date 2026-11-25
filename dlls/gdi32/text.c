@@ -860,7 +860,7 @@ HFONT WINAPI CreateFontIndirectExW( const ENUMLOGFONTEXDVW *enumex )
 /***********************************************************************
  *           CreateFontIndirectA   (GDI32.@)
  */
-HFONT WINAPI CreateFontIndirectA( const LOGFONTA *lfA )
+HFONT WINAPI DECLSPEC_HOTPATCH CreateFontIndirectA( const LOGFONTA *lfA )
 {
     LOGFONTW lfW;
 
@@ -1908,7 +1908,7 @@ BOOL WINAPI GetCharABCWidthsI( HDC hdc, UINT first, UINT count, WORD *glyphs, AB
 /***********************************************************************
  *           GetGlyphOutlineA    (GDI32.@)
  */
-DWORD WINAPI GetGlyphOutlineA( HDC hdc, UINT ch, UINT format, GLYPHMETRICS *metrics, DWORD size,
+DWORD WINAPI DECLSPEC_HOTPATCH GetGlyphOutlineA( HDC hdc, UINT ch, UINT format, GLYPHMETRICS *metrics, DWORD size,
                                void *buffer, const MAT2 *mat2 )
 {
     if (!mat2) return GDI_ERROR;
@@ -2253,7 +2253,7 @@ static INT WINAPI enum_proc_WtoA( const LOGFONTW *lf, const TEXTMETRICW *tm,
 /***********************************************************************
  *              EnumFontFamiliesExA	(GDI32.@)
  */
-INT WINAPI EnumFontFamiliesExA( HDC hdc, LOGFONTA *lf, FONTENUMPROCA efproc,
+INT WINAPI DECLSPEC_HOTPATCH EnumFontFamiliesExA( HDC hdc, LOGFONTA *lf, FONTENUMPROCA efproc,
                                 LPARAM lparam, DWORD flags )
 {
     struct enum_proc_paramsWtoA param;

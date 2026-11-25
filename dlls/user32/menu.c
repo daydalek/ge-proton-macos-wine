@@ -434,7 +434,7 @@ BOOL WINAPI InsertMenuA( HMENU hMenu, UINT pos, UINT flags,
 /*******************************************************************
  *         AppendMenuA    (USER32.@)
  */
-BOOL WINAPI AppendMenuA( HMENU hMenu, UINT flags,
+BOOL WINAPI DECLSPEC_HOTPATCH AppendMenuA( HMENU hMenu, UINT flags,
                          UINT_PTR id, LPCSTR data )
 {
     return InsertMenuA( hMenu, -1, flags | MF_BYPOSITION, id, data );

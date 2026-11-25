@@ -195,6 +195,8 @@ extern "C" {
 
 #if ((defined(__GNUC__) && ((__GNUC__ > 4) || ((__GNUC__ == 4) && (__GNUC_MINOR__ >= 6)))) || __has_attribute(ms_hook_prologue)) && (defined(__i386__) || defined(__x86_64__))
 #define DECLSPEC_HOTPATCH __attribute__((__ms_hook_prologue__))
+#elif defined(__clang__) && defined(__i386__) && __has_attribute(patchable_function_entry)
+#define DECLSPEC_HOTPATCH __attribute__((__patchable_function_entry__(8, 6), __noinline__))
 #else
 #define DECLSPEC_HOTPATCH
 #endif
