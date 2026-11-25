@@ -17,7 +17,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include "gst_private.h"
+#include "ntstatus.h"
+#define WIN32_NO_STATUS
+#include "winedmo_private.h"
 
 #include "mfapi.h"
 #include "mferror.h"
@@ -27,9 +29,9 @@
 #include "wmcodecdsp.h"
 
 #include "wine/debug.h"
+#include "wine/winedmo.h"
 
 #include "initguid.h"
-
 #include "icodecapi.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(mfplat);
@@ -53,9 +55,7 @@ struct video_encoder
 
     IMFAttributes *attributes;
 
-    wg_transform_t wg_transform;
-    struct wg_transform_attrs wg_transform_attrs;
-    struct wg_sample_queue *wg_sample_queue;
+    struct winedmo_transform winedmo_transform;
 };
 
 static inline struct video_encoder *impl_from_IMFTransform(IMFTransform *iface)
@@ -108,16 +108,34 @@ done:
     return hr;
 }
 
-static HRESULT video_encoder_try_create_wg_transform(struct video_encoder *encoder)
+static HRESULT video_encoder_try_create_winedmo_transform(struct video_encoder *encoder)
 {
-    if (encoder->wg_transform)
+    MFVIDEOFORMAT *input_format, *output_format;
+    UINT32 input_size, output_size;
+    NTSTATUS status;
+    HRESULT hr;
+
+    if (encoder->winedmo_transform.handle)
     {
-        wg_transform_destroy(encoder->wg_transform);
-        encoder->wg_transform = 0;
+        winedmo_transform_destroy(encoder->winedmo_transform);
+        encoder->winedmo_transform.handle = 0;
     }
 
-    return wg_transform_create_mf(encoder->input_type, encoder->output_type,
-            &encoder->wg_transform_attrs, &encoder->wg_transform);
+    if (FAILED(hr = MFCreateMFVideoFormatFromMFMediaType(encoder->input_type, &input_format, &input_size)))
+        return hr;
+    if (FAILED(hr = MFCreateMFVideoFormatFromMFMediaType(encoder->output_type, &output_format, &output_size)))
+    {
+        CoTaskMemFree(input_format);
+        return hr;
+    }
+
+    status = winedmo_transform_create(MFMediaType_Video,
+            (const union winedmo_format *)input_format, input_size,
+            (const union winedmo_format *)output_format, output_size,
+            &encoder->winedmo_transform);
+    CoTaskMemFree(output_format);
+    CoTaskMemFree(input_format);
+    return status ? E_FAIL : S_OK;
 }
 
 static HRESULT WINAPI transform_QueryInterface(IMFTransform *iface, REFIID iid, void **out)
@@ -165,9 +183,8 @@ static ULONG WINAPI transform_Release(IMFTransform *iface)
         if (encoder->output_type)
             IMFMediaType_Release(encoder->output_type);
         IMFAttributes_Release(encoder->attributes);
-        if (encoder->wg_transform)
-            wg_transform_destroy(encoder->wg_transform);
-        wg_sample_queue_destroy(encoder->wg_sample_queue);
+        if (encoder->winedmo_transform.handle)
+            winedmo_transform_destroy(encoder->winedmo_transform);
         free(encoder);
     }
 
@@ -304,10 +321,10 @@ static HRESULT WINAPI transform_SetInputType(IMFTransform *iface, DWORD id, IMFM
             IMFMediaType_Release(encoder->input_type);
             encoder->input_type = NULL;
         }
-        if (encoder->wg_transform)
+        if (encoder->winedmo_transform.handle)
         {
-            wg_transform_destroy(encoder->wg_transform);
-            encoder->wg_transform = 0;
+            winedmo_transform_destroy(encoder->winedmo_transform);
+            encoder->winedmo_transform.handle = 0;
         }
         return S_OK;
     }
@@ -347,7 +364,7 @@ static HRESULT WINAPI transform_SetInputType(IMFTransform *iface, DWORD id, IMFM
         IMFMediaType_Release(encoder->input_type);
     IMFMediaType_AddRef((encoder->input_type = type));
 
-    if (FAILED(hr = video_encoder_try_create_wg_transform(encoder)))
+    if (FAILED(hr = video_encoder_try_create_winedmo_transform(encoder)))
     {
         IMFMediaType_Release(encoder->input_type);
         encoder->input_type = NULL;
@@ -379,10 +396,10 @@ static HRESULT WINAPI transform_SetOutputType(IMFTransform *iface, DWORD id, IMF
             encoder->output_type = NULL;
             memset(&encoder->output_info, 0, sizeof(encoder->output_info));
         }
-        if (encoder->wg_transform)
+        if (encoder->winedmo_transform.handle)
         {
-            wg_transform_destroy(encoder->wg_transform);
-            encoder->wg_transform = 0;
+            winedmo_transform_destroy(encoder->winedmo_transform);
+            encoder->winedmo_transform.handle = 0;
         }
         return S_OK;
     }
@@ -428,10 +445,10 @@ static HRESULT WINAPI transform_SetOutputType(IMFTransform *iface, DWORD id, IMF
      * The right way is to calculate it based on frame width and height. */
     encoder->output_info.cbSize = 0x3bc400;
 
-    if (encoder->wg_transform)
+    if (encoder->winedmo_transform.handle)
     {
-        wg_transform_destroy(encoder->wg_transform);
-        encoder->wg_transform = 0;
+        winedmo_transform_destroy(encoder->winedmo_transform);
+        encoder->winedmo_transform.handle = 0;
     }
 
     return S_OK;
@@ -503,10 +520,10 @@ static HRESULT WINAPI transform_ProcessMessage(IMFTransform *iface, MFT_MESSAGE_
     switch (message)
     {
         case MFT_MESSAGE_COMMAND_DRAIN:
-            return wg_transform_drain(encoder->wg_transform);
+            return winedmo_transform_drain(encoder->winedmo_transform) ? E_FAIL : S_OK;
 
         case MFT_MESSAGE_COMMAND_FLUSH:
-            return wg_transform_flush(encoder->wg_transform);
+            return winedmo_transform_flush(encoder->winedmo_transform) ? E_FAIL : S_OK;
 
         default:
             FIXME("Ignoring message %#x.\n", message);
@@ -520,10 +537,33 @@ static HRESULT WINAPI transform_ProcessInput(IMFTransform *iface, DWORD id, IMFS
 
     TRACE("iface %p, id %#lx, sample %p, flags %#lx.\n", iface, id, sample, flags);
 
-    if (!encoder->wg_transform)
+    if (!encoder->winedmo_transform.handle)
         return MF_E_TRANSFORM_TYPE_NOT_SET;
 
-    return wg_transform_push_mf(encoder->wg_transform, sample, encoder->wg_sample_queue);
+    {
+        IMFMediaBuffer *buffer;
+        NTSTATUS nt_status;
+        BYTE *data;
+        DWORD size;
+        INT64 pts, dur;
+        HRESULT hr;
+
+        if (FAILED(hr = IMFSample_ConvertToContiguousBuffer(sample, &buffer)))
+            return hr;
+        if (FAILED(hr = IMFMediaBuffer_Lock(buffer, &data, NULL, &size)))
+        {
+            IMFMediaBuffer_Release(buffer);
+            return hr;
+        }
+        if (FAILED(IMFSample_GetSampleTime(sample, &pts))) pts = INT64_MIN;
+        if (FAILED(IMFSample_GetSampleDuration(sample, &dur))) dur = INT64_MIN;
+        nt_status = winedmo_transform_push_input(encoder->winedmo_transform, data, size,
+                pts, INT64_MIN, dur, 0);
+        IMFMediaBuffer_Unlock(buffer);
+        IMFMediaBuffer_Release(buffer);
+        if (nt_status == STATUS_DEVICE_BUSY) return MF_E_NOTACCEPTING;
+        return nt_status ? E_FAIL : S_OK;
+    }
 }
 
 static HRESULT WINAPI transform_ProcessOutput(IMFTransform *iface, DWORD flags, DWORD count,
@@ -536,15 +576,53 @@ static HRESULT WINAPI transform_ProcessOutput(IMFTransform *iface, DWORD flags, 
 
     if (count != 1)
         return E_INVALIDARG;
-    if (!encoder->wg_transform)
+    if (!encoder->winedmo_transform.handle)
         return MF_E_TRANSFORM_TYPE_NOT_SET;
     if (!samples->pSample)
         return E_INVALIDARG;
 
-    if (SUCCEEDED(hr = wg_transform_read_mf(encoder->wg_transform, samples->pSample, &samples->dwStatus, NULL)))
-        wg_sample_queue_flush(encoder->wg_sample_queue, false);
+    {
+        IMFMediaBuffer *buffer;
+        NTSTATUS nt_status;
+        BYTE *data;
+        DWORD max_size;
+        UINT32 out_size;
+        INT64 out_pts, out_dur;
+        DWORD out_flags;
 
-    return hr;
+        if (FAILED(hr = IMFSample_ConvertToContiguousBuffer(samples->pSample, &buffer)))
+            return hr;
+        if (FAILED(hr = IMFMediaBuffer_Lock(buffer, &data, &max_size, NULL)))
+        {
+            IMFMediaBuffer_Release(buffer);
+            return hr;
+        }
+        out_size = max_size;
+        nt_status = winedmo_transform_get_output(encoder->winedmo_transform, data, &out_size, &out_pts, &out_dur, &out_flags);
+        if (!nt_status)
+        {
+            if (out_flags & WINEDMO_SAMPLE_FLAG_FORMAT_CHANGED)
+            {
+                IMFMediaBuffer_Unlock(buffer);
+                IMFMediaBuffer_Release(buffer);
+                return MF_E_TRANSFORM_STREAM_CHANGE;
+            }
+            IMFMediaBuffer_SetCurrentLength(buffer, out_size);
+            if (out_pts != INT64_MIN)
+            {
+                IMFSample_SetSampleTime(samples->pSample, out_pts);
+                if (out_dur != INT64_MIN)
+                    IMFSample_SetSampleDuration(samples->pSample, out_dur);
+            }
+            if (out_flags & WINEDMO_SAMPLE_FLAG_INCOMPLETE)
+                samples->dwStatus |= MFT_OUTPUT_DATA_BUFFER_INCOMPLETE;
+        }
+        IMFMediaBuffer_Unlock(buffer);
+        IMFMediaBuffer_Release(buffer);
+        if (nt_status == STATUS_MORE_PROCESSING_REQUIRED) return MF_E_TRANSFORM_NEED_MORE_INPUT;
+        if (nt_status == STATUS_END_OF_FILE) return MF_E_END_OF_STREAM;
+        return nt_status ? E_FAIL : S_OK;
+    }
 }
 
 static const IMFTransformVtbl transform_vtbl =
@@ -728,14 +806,9 @@ static HRESULT video_encoder_create(const GUID *const *input_types, UINT input_t
     encoder->output_types = output_types;
     encoder->output_type_count = output_type_count;
 
-    encoder->wg_transform_attrs.input_queue_length = 15;
-
     if (FAILED(hr = MFCreateAttributes(&encoder->attributes, 16)))
         goto failed;
     if (FAILED(hr = IMFAttributes_SetUINT32(encoder->attributes, &MFT_ENCODER_SUPPORTS_CONFIG_EVENT, TRUE)))
-        goto failed;
-
-    if (FAILED(hr = wg_sample_queue_create(&encoder->wg_sample_queue)))
         goto failed;
 
     *out = encoder;
@@ -764,28 +837,10 @@ static const GUID *const h264_encoder_output_types[] =
 
 HRESULT h264_encoder_create(REFIID riid, void **out)
 {
-    const MFVIDEOFORMAT input_format =
-    {
-        .dwSize = sizeof(MFVIDEOFORMAT),
-        .videoInfo = {.dwWidth = 1920, .dwHeight = 1080},
-        .guidFormat = MFVideoFormat_NV12,
-    };
-    const MFVIDEOFORMAT output_format =
-    {
-        .dwSize = sizeof(MFVIDEOFORMAT),
-        .videoInfo = {.dwWidth = 1920, .dwHeight = 1080},
-        .guidFormat = MFVideoFormat_H264,
-    };
     struct video_encoder *encoder;
     HRESULT hr;
 
     TRACE("riid %s, out %p.\n", debugstr_guid(riid), out);
-
-    if (FAILED(hr = check_video_transform_support(&input_format, &output_format)))
-    {
-        ERR_(winediag)("GStreamer doesn't support H.264 encoding, please install appropriate plugins\n");
-        return hr;
-    }
 
     if (FAILED(hr = video_encoder_create(h264_encoder_input_types, ARRAY_SIZE(h264_encoder_input_types),
             h264_encoder_output_types, ARRAY_SIZE(h264_encoder_output_types), &encoder)))

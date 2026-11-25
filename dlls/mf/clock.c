@@ -72,9 +72,8 @@ struct clock_timer
 {
     IUnknown IUnknown_iface;
     LONG refcount;
+    LONGLONG time;
     IMFAsyncResult *result;
-    IMFAsyncCallback *callback;
-    MFWORKITEM_KEY key;
     struct list entry;
 };
 
@@ -85,7 +84,6 @@ struct presentation_clock
     IMFTimer IMFTimer_iface;
     IMFShutdown IMFShutdown_iface;
     IMFAsyncCallback sink_callback;
-    IMFAsyncCallback timer_callback;
     LONG refcount;
     IMFPresentationTimeSource *time_source;
     IMFClockStateSink *time_source_sink;
@@ -97,6 +95,7 @@ struct presentation_clock
     LONGLONG frequency;
     CRITICAL_SECTION cs;
     BOOL is_shut_down;
+    DWORD key;
 };
 
 static struct presentation_clock *impl_from_IMFPresentationClock(IMFPresentationClock *iface)
@@ -122,11 +121,6 @@ static struct presentation_clock *impl_from_IMFShutdown(IMFShutdown *iface)
 static struct presentation_clock *impl_from_sink_callback_IMFAsyncCallback(IMFAsyncCallback *iface)
 {
     return CONTAINING_RECORD(iface, struct presentation_clock, sink_callback);
-}
-
-static struct presentation_clock *impl_from_timer_callback_IMFAsyncCallback(IMFAsyncCallback *iface)
-{
-    return CONTAINING_RECORD(iface, struct presentation_clock, timer_callback);
 }
 
 static struct clock_timer *impl_clock_timer_from_IUnknown(IUnknown *iface)
@@ -294,14 +288,21 @@ static ULONG WINAPI present_clock_Release(IMFPresentationClock *iface)
 static HRESULT WINAPI present_clock_GetClockCharacteristics(IMFPresentationClock *iface, DWORD *flags)
 {
     struct presentation_clock *clock = impl_from_IMFPresentationClock(iface);
+    IMFPresentationTimeSource *time_source;
     HRESULT hr = MF_E_CLOCK_NO_TIME_SOURCE;
 
     TRACE("%p, %p.\n", iface, flags);
 
     EnterCriticalSection(&clock->cs);
-    if (clock->time_source)
-        hr = IMFPresentationTimeSource_GetClockCharacteristics(clock->time_source, flags);
+    if ((time_source = clock->time_source))
+        IMFPresentationTimeSource_AddRef(time_source);
     LeaveCriticalSection(&clock->cs);
+
+    if (time_source)
+    {
+        hr = IMFPresentationTimeSource_GetClockCharacteristics(time_source, flags);
+        IMFPresentationTimeSource_Release(time_source);
+    }
 
     return hr;
 }
@@ -310,14 +311,21 @@ static HRESULT WINAPI present_clock_GetCorrelatedTime(IMFPresentationClock *ifac
         LONGLONG *clock_time, MFTIME *system_time)
 {
     struct presentation_clock *clock = impl_from_IMFPresentationClock(iface);
+    IMFPresentationTimeSource *time_source;
     HRESULT hr = MF_E_CLOCK_NO_TIME_SOURCE;
 
     TRACE("%p, %#lx, %p, %p.\n", iface, reserved, clock_time, system_time);
 
     EnterCriticalSection(&clock->cs);
-    if (clock->time_source)
-        hr = IMFPresentationTimeSource_GetCorrelatedTime(clock->time_source, reserved, clock_time, system_time);
+    if ((time_source = clock->time_source))
+        IMFPresentationTimeSource_AddRef(time_source);
     LeaveCriticalSection(&clock->cs);
+
+    if (time_source)
+    {
+        hr = IMFPresentationTimeSource_GetCorrelatedTime(time_source, reserved, clock_time, system_time);
+        IMFPresentationTimeSource_Release(time_source);
+    }
 
     return hr;
 }
@@ -347,14 +355,21 @@ static HRESULT WINAPI present_clock_GetState(IMFPresentationClock *iface, DWORD 
 static HRESULT WINAPI present_clock_GetProperties(IMFPresentationClock *iface, MFCLOCK_PROPERTIES *props)
 {
     struct presentation_clock *clock = impl_from_IMFPresentationClock(iface);
+    IMFPresentationTimeSource *time_source;
     HRESULT hr = MF_E_CLOCK_NO_TIME_SOURCE;
 
     TRACE("%p, %p.\n", iface, props);
 
     EnterCriticalSection(&clock->cs);
-    if (clock->time_source)
-        hr = IMFPresentationTimeSource_GetProperties(clock->time_source, props);
+    if ((time_source = clock->time_source))
+        IMFPresentationTimeSource_AddRef(time_source);
     LeaveCriticalSection(&clock->cs);
+
+    if (time_source)
+    {
+        hr = IMFPresentationTimeSource_GetProperties(time_source, props);
+        IMFPresentationTimeSource_Release(time_source);
+    }
 
     return hr;
 }
@@ -427,6 +442,7 @@ static HRESULT WINAPI present_clock_GetTimeSource(IMFPresentationClock *iface,
 static HRESULT WINAPI present_clock_GetTime(IMFPresentationClock *iface, MFTIME *time)
 {
     struct presentation_clock *clock = impl_from_IMFPresentationClock(iface);
+    IMFPresentationTimeSource *time_source;
     HRESULT hr = MF_E_CLOCK_NO_TIME_SOURCE;
     MFTIME systime;
 
@@ -436,9 +452,15 @@ static HRESULT WINAPI present_clock_GetTime(IMFPresentationClock *iface, MFTIME 
         return E_POINTER;
 
     EnterCriticalSection(&clock->cs);
-    if (clock->time_source)
-        hr = IMFPresentationTimeSource_GetCorrelatedTime(clock->time_source, 0, time, &systime);
+    if ((time_source = clock->time_source))
+        IMFPresentationTimeSource_AddRef(time_source);
     LeaveCriticalSection(&clock->cs);
+
+    if (time_source)
+    {
+        hr = IMFPresentationTimeSource_GetCorrelatedTime(time_source, 0, time, &systime);
+        IMFPresentationTimeSource_Release(time_source);
+    }
 
     return hr;
 }
@@ -555,8 +577,51 @@ static HRESULT clock_call_state_change(MFTIME system_time, struct clock_state_ch
     return hr;
 }
 
+static struct clock_timer *presentation_clock_next_timer(struct presentation_clock *clock, LONGLONG time)
+{
+    struct clock_timer *timer;
+
+    LIST_FOR_EACH_ENTRY(timer, &clock->timers, struct clock_timer, entry)
+    {
+        if (timer->time <= time + 50000)
+            return timer;
+    }
+
+    return NULL;
+}
+
+static void CALLBACK presentation_clock_timer_callback(IUnknown *context)
+{
+    struct presentation_clock *clock = impl_from_IMFPresentationClock((IMFPresentationClock*)context);
+    IMFPresentationTimeSource *time_source;
+    struct clock_timer *timer;
+    LONGLONG time, systime;
+
+    EnterCriticalSection(&clock->cs);
+    if ((time_source = clock->time_source))
+        IMFPresentationTimeSource_AddRef(time_source);
+    LeaveCriticalSection(&clock->cs);
+
+    /* We don't hold the critical section during a call to GetCorrelatedTime as it can result in a deadlock. */
+    if (time_source &&
+            SUCCEEDED(IMFPresentationTimeSource_GetCorrelatedTime(time_source, 0, &time, &systime)))
+    {
+        EnterCriticalSection(&clock->cs);
+        while ( (timer = presentation_clock_next_timer(clock, time)) )
+        {
+            list_remove(&timer->entry);
+            MFInvokeCallback(timer->result);
+            IUnknown_Release(&timer->IUnknown_iface);
+        }
+        LeaveCriticalSection(&clock->cs);
+    }
+
+    if (time_source)
+        IMFPresentationTimeSource_Release(time_source);
+}
+
 static HRESULT clock_change_state(struct presentation_clock *clock, enum clock_command command,
-        struct clock_state_change_param param)
+        struct clock_state_change_param param, DWORD *remove_key)
 {
     static const MFCLOCK_STATE states[CLOCK_CMD_MAX] =
     {
@@ -572,9 +637,9 @@ static HRESULT clock_change_state(struct presentation_clock *clock, enum clock_c
         [CLOCK_CMD_SET_RATE] = CLOCK_NOTIFY_SET_RATE,
     };
     enum clock_notification notification;
+    IMFClockStateSink *time_source_sink;
     struct clock_sink *sink;
     MFCLOCK_STATE old_state;
-    IMFAsyncResult *result;
     MFTIME system_time;
     HRESULT hr;
 
@@ -598,7 +663,13 @@ static HRESULT clock_change_state(struct presentation_clock *clock, enum clock_c
     else
         notification = notifications[command];
 
-    if (FAILED(hr = clock_call_state_change(system_time, param, notification, clock->time_source_sink)))
+    time_source_sink = clock->time_source_sink;
+    IMFClockStateSink_AddRef(time_source_sink);
+    LeaveCriticalSection(&clock->cs);
+    hr = clock_call_state_change(system_time, param, notification, time_source_sink);
+    EnterCriticalSection(&clock->cs);
+    IMFClockStateSink_Release(time_source_sink);
+    if (FAILED(hr))
         return hr;
 
     old_state = clock->state;
@@ -609,38 +680,26 @@ static HRESULT clock_change_state(struct presentation_clock *clock, enum clock_c
        transitioning from running state. */
     if ((clock->state == MFCLOCK_STATE_RUNNING) ^ (old_state == MFCLOCK_STATE_RUNNING))
     {
-        struct clock_timer *timer, *timer2;
-
         if (clock->state == MFCLOCK_STATE_RUNNING)
         {
-            LIST_FOR_EACH_ENTRY_SAFE(timer, timer2, &clock->timers, struct clock_timer, entry)
-            {
-                list_remove(&timer->entry);
-                hr = MFCreateAsyncResult(&timer->IUnknown_iface, &clock->timer_callback, NULL, &result);
-                IUnknown_Release(&timer->IUnknown_iface);
-                if (SUCCEEDED(hr))
-                {
-                    MFPutWorkItemEx(MFASYNC_CALLBACK_QUEUE_TIMER, result);
-                    IMFAsyncResult_Release(result);
-                }
-            }
+            if (FAILED(hr = MFAddPeriodicCallback(presentation_clock_timer_callback, (IUnknown*)&clock->IMFPresentationClock_iface, &clock->key)))
+                ERR("Failed to start periodic callback %#lx\n", hr);
         }
         else
         {
-            LIST_FOR_EACH_ENTRY(timer, &clock->timers, struct clock_timer, entry)
+            if (clock->key)
             {
-                if (timer->key)
-                {
-                    MFCancelWorkItem(timer->key);
-                    timer->key = 0;
-                }
+                *remove_key = clock->key;
+                clock->key = 0;
             }
         }
     }
 
     LIST_FOR_EACH_ENTRY(sink, &clock->sinks, struct clock_sink, entry)
     {
-        clock_notify_async_sink(clock, system_time, param, notification, sink->state_sink);
+        /* Don't notify a sink that is also the time source */
+        if (clock->time_source_sink != sink->state_sink)
+            clock_notify_async_sink(clock, system_time, param, notification, sink->state_sink);
     }
 
     return S_OK;
@@ -650,14 +709,18 @@ static HRESULT WINAPI present_clock_Start(IMFPresentationClock *iface, LONGLONG 
 {
     struct presentation_clock *clock = impl_from_IMFPresentationClock(iface);
     struct clock_state_change_param param = {{0}};
+    DWORD remove_key = 0;
     HRESULT hr;
 
     TRACE("%p, %s.\n", iface, debugstr_time(start_offset));
 
     EnterCriticalSection(&clock->cs);
     clock->start_offset = param.u.offset = start_offset;
-    hr = clock_change_state(clock, CLOCK_CMD_START, param);
+    hr = clock_change_state(clock, CLOCK_CMD_START, param, &remove_key);
     LeaveCriticalSection(&clock->cs);
+
+    if (remove_key)
+        MFRemovePeriodicCallback(remove_key);
 
     return hr;
 }
@@ -666,13 +729,17 @@ static HRESULT WINAPI present_clock_Stop(IMFPresentationClock *iface)
 {
     struct presentation_clock *clock = impl_from_IMFPresentationClock(iface);
     struct clock_state_change_param param = {{0}};
+    DWORD remove_key = 0;
     HRESULT hr;
 
     TRACE("%p.\n", iface);
 
     EnterCriticalSection(&clock->cs);
-    hr = clock_change_state(clock, CLOCK_CMD_STOP, param);
+    hr = clock_change_state(clock, CLOCK_CMD_STOP, param, &remove_key);
     LeaveCriticalSection(&clock->cs);
+
+    if (remove_key)
+        MFRemovePeriodicCallback(remove_key);
 
     return hr;
 }
@@ -681,13 +748,17 @@ static HRESULT WINAPI present_clock_Pause(IMFPresentationClock *iface)
 {
     struct presentation_clock *clock = impl_from_IMFPresentationClock(iface);
     struct clock_state_change_param param = {{0}};
+    DWORD remove_key = 0;
     HRESULT hr;
 
     TRACE("%p.\n", iface);
 
     EnterCriticalSection(&clock->cs);
-    hr = clock_change_state(clock, CLOCK_CMD_PAUSE, param);
+    hr = clock_change_state(clock, CLOCK_CMD_PAUSE, param, &remove_key);
     LeaveCriticalSection(&clock->cs);
+
+    if (remove_key)
+        MFRemovePeriodicCallback(remove_key);
 
     return hr;
 }
@@ -734,6 +805,7 @@ static HRESULT WINAPI present_clock_rate_SetRate(IMFRateControl *iface, BOOL thi
 {
     struct presentation_clock *clock = impl_from_IMFRateControl(iface);
     struct clock_state_change_param param;
+    DWORD remove_key = 0;
     HRESULT hr;
 
     TRACE("%p, %d, %f.\n", iface, thin, rate);
@@ -743,9 +815,12 @@ static HRESULT WINAPI present_clock_rate_SetRate(IMFRateControl *iface, BOOL thi
 
     EnterCriticalSection(&clock->cs);
     param.u.rate = rate;
-    if (SUCCEEDED(hr = clock_change_state(clock, CLOCK_CMD_SET_RATE, param)))
+    if (SUCCEEDED(hr = clock_change_state(clock, CLOCK_CMD_SET_RATE, param, &remove_key)))
         clock->rate = rate;
     LeaveCriticalSection(&clock->cs);
+
+    if (remove_key)
+        MFRemovePeriodicCallback(remove_key);
 
     return hr;
 }
@@ -797,39 +872,24 @@ static ULONG WINAPI present_clock_timer_Release(IMFTimer *iface)
 }
 
 static HRESULT present_clock_schedule_timer(struct presentation_clock *clock, DWORD flags, LONGLONG time,
-        struct clock_timer *timer)
+        IMFAsyncCallback *callback, IUnknown *state, struct clock_timer *timer)
 {
-    IMFAsyncResult *result;
     MFTIME systime, clocktime;
-    LONGLONG frequency;
     HRESULT hr;
 
-    if (!(flags & MFTIMER_RELATIVE))
+    timer->time = time;
+
+    if (flags & MFTIMER_RELATIVE)
     {
         if (FAILED(hr = IMFPresentationTimeSource_GetCorrelatedTime(clock->time_source, 0, &clocktime, &systime)))
         {
             WARN("Failed to get clock time, hr %#lx.\n", hr);
             return hr;
         }
-        if (time > clocktime)
-            time -= clocktime;
-        else
-            time = 0;
+        timer->time += clocktime;
     }
 
-    frequency = clock->frequency / 1000;
-    time /= frequency;
-
-    /* Scheduled item is using clock instance callback, with timer instance as an object. Clock callback will
-       call user callback and cleanup timer list. */
-
-    if (FAILED(hr = MFCreateAsyncResult(&timer->IUnknown_iface, &clock->timer_callback, NULL, &result)))
-        return hr;
-
-    hr = MFScheduleWorkItemEx(result, -time, &timer->key);
-    IMFAsyncResult_Release(result);
-
-    return hr;
+    return MFCreateAsyncResult(NULL, callback, state, &timer->result);
 }
 
 static HRESULT WINAPI clock_timer_QueryInterface(IUnknown *iface, REFIID riid, void **obj)
@@ -859,7 +919,6 @@ static ULONG WINAPI clock_timer_Release(IUnknown *iface)
     if (!refcount)
     {
         IMFAsyncResult_Release(timer->result);
-        IMFAsyncCallback_Release(timer->callback);
         free(timer);
     }
 
@@ -885,7 +944,7 @@ static HRESULT WINAPI present_clock_timer_SetTimer(IMFTimer *iface, DWORD flags,
     if (!(clock_timer = calloc(1, sizeof(*clock_timer))))
         return E_OUTOFMEMORY;
 
-    if (FAILED(hr = MFCreateAsyncResult(NULL, NULL, state, &clock_timer->result)))
+    if (FAILED(hr = present_clock_schedule_timer(clock, flags, time, callback, state, clock_timer)))
     {
         free(clock_timer);
         return hr;
@@ -893,14 +952,10 @@ static HRESULT WINAPI present_clock_timer_SetTimer(IMFTimer *iface, DWORD flags,
 
     clock_timer->IUnknown_iface.lpVtbl = &clock_timer_vtbl;
     clock_timer->refcount = 1;
-    clock_timer->callback = callback;
-    IMFAsyncCallback_AddRef(clock_timer->callback);
 
     EnterCriticalSection(&clock->cs);
 
-    if (clock->state == MFCLOCK_STATE_RUNNING)
-        hr = present_clock_schedule_timer(clock, flags, time, clock_timer);
-    else if (clock->state == MFCLOCK_STATE_STOPPED)
+    if (clock->state == MFCLOCK_STATE_STOPPED)
         hr = MF_S_CLOCK_STOPPED;
 
     if (SUCCEEDED(hr))
@@ -935,11 +990,6 @@ static HRESULT WINAPI present_clock_timer_CancelTimer(IMFTimer *iface, IUnknown 
         if (&timer->IUnknown_iface == cancel_key)
         {
             list_remove(&timer->entry);
-            if (timer->key)
-            {
-                MFCancelWorkItem(timer->key);
-                timer->key = 0;
-            }
             IUnknown_Release(&timer->IUnknown_iface);
             break;
         }
@@ -980,12 +1030,21 @@ static ULONG WINAPI present_clock_shutdown_Release(IMFShutdown *iface)
 static HRESULT WINAPI present_clock_shutdown_Shutdown(IMFShutdown *iface)
 {
     struct presentation_clock *clock = impl_from_IMFShutdown(iface);
+    DWORD remove_key = 0;
 
     TRACE("%p.\n", iface);
 
     EnterCriticalSection(&clock->cs);
     clock->is_shut_down = TRUE;
+    if (clock->key)
+    {
+        remove_key = clock->key;
+        clock->key = 0;
+    }
     LeaveCriticalSection(&clock->cs);
+
+    if (remove_key)
+        MFRemovePeriodicCallback(remove_key);
 
     return S_OK;
 }
@@ -1048,7 +1107,9 @@ static ULONG WINAPI present_clock_sink_callback_Release(IMFAsyncCallback *iface)
 
 static HRESULT WINAPI present_clock_callback_GetParameters(IMFAsyncCallback *iface, DWORD *flags, DWORD *queue)
 {
-    return E_NOTIMPL;
+    *flags = 0;
+    *queue = MFASYNC_CALLBACK_QUEUE_MULTITHREADED;
+    return S_OK;
 }
 
 static HRESULT WINAPI present_clock_sink_callback_Invoke(IMFAsyncCallback *iface, IMFAsyncResult *result)
@@ -1078,57 +1139,6 @@ static const IMFAsyncCallbackVtbl presentclocksinkcallbackvtbl =
     present_clock_sink_callback_Invoke,
 };
 
-static ULONG WINAPI present_clock_timer_callback_AddRef(IMFAsyncCallback *iface)
-{
-    struct presentation_clock *clock = impl_from_timer_callback_IMFAsyncCallback(iface);
-    return IMFPresentationClock_AddRef(&clock->IMFPresentationClock_iface);
-}
-
-static ULONG WINAPI present_clock_timer_callback_Release(IMFAsyncCallback *iface)
-{
-    struct presentation_clock *clock = impl_from_timer_callback_IMFAsyncCallback(iface);
-    return IMFPresentationClock_Release(&clock->IMFPresentationClock_iface);
-}
-
-static HRESULT WINAPI present_clock_timer_callback_Invoke(IMFAsyncCallback *iface, IMFAsyncResult *result)
-{
-    struct presentation_clock *clock = impl_from_timer_callback_IMFAsyncCallback(iface);
-    struct clock_timer *timer;
-    IUnknown *object;
-    HRESULT hr;
-
-    if (FAILED(hr = IMFAsyncResult_GetObject(result, &object)))
-        return hr;
-
-    EnterCriticalSection(&clock->cs);
-    LIST_FOR_EACH_ENTRY(timer, &clock->timers, struct clock_timer, entry)
-    {
-        if (&timer->IUnknown_iface == object)
-        {
-            list_remove(&timer->entry);
-            IUnknown_Release(&timer->IUnknown_iface);
-            break;
-        }
-    }
-    LeaveCriticalSection(&clock->cs);
-
-    timer = impl_clock_timer_from_IUnknown(object);
-    IMFAsyncCallback_Invoke(timer->callback, timer->result);
-
-    IUnknown_Release(object);
-
-    return S_OK;
-}
-
-static const IMFAsyncCallbackVtbl presentclocktimercallbackvtbl =
-{
-    present_clock_callback_QueryInterface,
-    present_clock_timer_callback_AddRef,
-    present_clock_timer_callback_Release,
-    present_clock_callback_GetParameters,
-    present_clock_timer_callback_Invoke,
-};
-
 /***********************************************************************
  *      MFCreatePresentationClock (mf.@)
  */
@@ -1146,7 +1156,6 @@ HRESULT WINAPI MFCreatePresentationClock(IMFPresentationClock **clock)
     object->IMFTimer_iface.lpVtbl = &presentclocktimervtbl;
     object->IMFShutdown_iface.lpVtbl = &presentclockshutdownvtbl;
     object->sink_callback.lpVtbl = &presentclocksinkcallbackvtbl;
-    object->timer_callback.lpVtbl = &presentclocktimercallbackvtbl;
     object->refcount = 1;
     list_init(&object->sinks);
     list_init(&object->timers);

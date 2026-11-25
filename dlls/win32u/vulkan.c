@@ -3006,7 +3006,13 @@ static void vulkan_init_once(void)
     if (!(libvulkan = getenv( "CX_LIBVULKAN" )) ||
         !(graphics_backend = getenv( "CX_ACTIVE_GRAPHICS_BACKEND" )) ||
         strcmp( graphics_backend, "wined3d" ))
+    {
+#ifdef SONAME_LIBVULKAN
         libvulkan = SONAME_LIBVULKAN;
+#else
+        return;
+#endif
+    }
     else
         ERR( "Using %s\n", libvulkan );
 

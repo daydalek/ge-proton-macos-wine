@@ -1,4 +1,4 @@
-/* Gstreamer Media Sink
+/* winedmo Media Sink
  *
  * Copyright 2023 Ziqing Hui for CodeWeavers
  *
@@ -17,12 +17,13 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include "gst_private.h"
+#include "winedmo_private.h"
 #include "mferror.h"
 #include "mfapi.h"
 
 #include "wine/debug.h"
 #include "wine/list.h"
+#include "wine/winedmo.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(mfplat);
 
@@ -94,7 +95,7 @@ struct media_sink
 
     struct list stream_sinks;
 
-    wg_muxer_t muxer;
+    struct winedmo_muxer muxer;
 };
 
 static struct stream_sink *impl_from_IMFStreamSink(IMFStreamSink *iface)
@@ -571,21 +572,23 @@ static HRESULT media_sink_queue_stream_event(struct media_sink *media_sink, Medi
 
 static HRESULT media_sink_write_stream(struct media_sink *media_sink)
 {
-    BYTE buffer[1024];
-    UINT32 size = sizeof(buffer);
+    BYTE buffer[4096];
+    UINT32 size;
+    UINT64 offset;
     ULONG written;
-    QWORD offset;
+    NTSTATUS status;
     HRESULT hr;
 
-    while (SUCCEEDED(hr = wg_muxer_read_data(media_sink->muxer, buffer, &size, &offset)))
+    for (;;)
     {
-        if (offset != UINT64_MAX && FAILED(hr = IMFByteStream_SetCurrentPosition(media_sink->bytestream, offset)))
-            return hr;
+        size = sizeof(buffer);
+        if ((status = winedmo_muxer_read_data(media_sink->muxer, buffer, &size, &offset)))
+            break;
 
+        if (FAILED(hr = IMFByteStream_SetCurrentPosition(media_sink->bytestream, offset)))
+            return hr;
         if (FAILED(hr = IMFByteStream_Write(media_sink->bytestream, buffer, size, &written)))
             return hr;
-
-        size = sizeof(buffer);
     }
 
     return S_OK;
@@ -593,10 +596,10 @@ static HRESULT media_sink_write_stream(struct media_sink *media_sink)
 
 static HRESULT media_sink_start(struct media_sink *media_sink)
 {
-    HRESULT hr;
+    NTSTATUS status;
 
-    if (FAILED(hr = wg_muxer_start(media_sink->muxer)))
-        return hr;
+    if ((status = winedmo_muxer_start(media_sink->muxer)))
+        return HRESULT_FROM_NT(status);
 
     media_sink->state = STATE_STARTED;
 
@@ -618,10 +621,14 @@ static HRESULT media_sink_pause(struct media_sink *media_sink)
 
 static HRESULT media_sink_process(struct media_sink *media_sink, IMFSample *sample, UINT32 stream_id)
 {
-    wg_muxer_t muxer = media_sink->muxer;
-    struct wg_sample *wg_sample;
+    IMFMediaBuffer *media_buffer;
     LONGLONG time, duration;
+    INT64 pts, dur;
+    BYTE *data;
+    DWORD data_size;
     UINT32 value;
+    DWORD flags = 0;
+    NTSTATUS status;
     HRESULT hr;
 
     TRACE("media_sink %p, sample %p, stream_id %u.\n", media_sink, sample, stream_id);
@@ -629,28 +636,29 @@ static HRESULT media_sink_process(struct media_sink *media_sink, IMFSample *samp
     if (FAILED(hr = media_sink_write_stream(media_sink)))
         WARN("Failed to write output samples to stream, hr %#lx.\n", hr);
 
-    if (FAILED(hr = wg_sample_create_mf(sample, &wg_sample)))
+    if (FAILED(hr = IMFSample_ConvertToContiguousBuffer(sample, &media_buffer)))
         return hr;
 
-    if (SUCCEEDED(IMFSample_GetSampleTime(sample, &time)))
+    if (FAILED(hr = IMFMediaBuffer_Lock(media_buffer, &data, NULL, &data_size)))
     {
-        wg_sample->flags |= WG_SAMPLE_FLAG_HAS_PTS;
-        wg_sample->pts = time;
+        IMFMediaBuffer_Release(media_buffer);
+        return hr;
     }
-    if (SUCCEEDED(IMFSample_GetSampleDuration(sample, &duration)))
-    {
-        wg_sample->flags |= WG_SAMPLE_FLAG_HAS_DURATION;
-        wg_sample->duration = duration;
-    }
+
+    pts = INT64_MIN; dur = 0;
+    if (SUCCEEDED(IMFSample_GetSampleTime(sample, &time)))      pts = time;
+    if (SUCCEEDED(IMFSample_GetSampleDuration(sample, &duration))) dur = duration;
     if (SUCCEEDED(IMFSample_GetUINT32(sample, &MFSampleExtension_CleanPoint, &value)) && value)
-        wg_sample->flags |= WG_SAMPLE_FLAG_SYNC_POINT;
+        flags |= WINEDMO_SAMPLE_FLAG_SYNC_POINT;
     if (SUCCEEDED(IMFSample_GetUINT32(sample, &MFSampleExtension_Discontinuity, &value)) && value)
-        wg_sample->flags |= WG_SAMPLE_FLAG_DISCONTINUITY;
+        flags |= WINEDMO_SAMPLE_FLAG_DISCONTINUITY;
 
-    hr = wg_muxer_push_sample(muxer, wg_sample, stream_id);
-    wg_sample_release(wg_sample);
+    status = winedmo_muxer_push_sample(media_sink->muxer, stream_id, data, data_size, pts, dur, flags);
 
-    return hr;
+    IMFMediaBuffer_Unlock(media_buffer);
+    IMFMediaBuffer_Release(media_buffer);
+
+    return HRESULT_FROM_NT(status);
 }
 
 static HRESULT media_sink_begin_finalize(struct media_sink *media_sink, IMFAsyncCallback *callback, IUnknown *state)
@@ -687,7 +695,7 @@ static HRESULT media_sink_finalize(struct media_sink *media_sink, IMFAsyncResult
 
     media_sink->state = STATE_FINALIZED;
 
-    hr = wg_muxer_finalize(media_sink->muxer);
+    hr = HRESULT_FROM_NT(winedmo_muxer_finalize(media_sink->muxer));
 
     if (SUCCEEDED(hr))
         hr = media_sink_write_stream(media_sink);
@@ -752,7 +760,7 @@ static ULONG WINAPI media_sink_Release(IMFFinalizableMediaSink *iface)
         IMFByteStream_Release(media_sink->bytestream);
         media_sink->cs.DebugInfo->Spare[0] = 0;
         DeleteCriticalSection(&media_sink->cs);
-        wg_muxer_destroy(media_sink->muxer);
+        winedmo_muxer_destroy(media_sink->muxer);
         free(media_sink);
     }
 
@@ -771,7 +779,10 @@ static HRESULT WINAPI media_sink_AddStreamSink(IMFFinalizableMediaSink *iface, D
 {
     struct media_sink *media_sink = impl_from_IMFFinalizableMediaSink(iface);
     struct stream_sink *object;
-    struct wg_format format;
+    GUID major_type;
+    void *format_ptr = NULL;
+    UINT32 format_size = 0;
+    NTSTATUS status;
     HRESULT hr;
 
     TRACE("iface %p, stream_sink_id %#lx, media_type %p, stream_sink %p.\n",
@@ -792,13 +803,23 @@ static HRESULT WINAPI media_sink_AddStreamSink(IMFFinalizableMediaSink *iface, D
         return hr;
     }
 
-    mf_media_type_to_wg_format(media_type, &format);
-    if (FAILED(hr = wg_muxer_add_stream(media_sink->muxer, stream_sink_id, &format)))
-    {
-        LeaveCriticalSection(&media_sink->cs);
-        IMFStreamSink_Release(&object->IMFStreamSink_iface);
-        return hr;
-    }
+    if (FAILED(hr = IMFMediaType_GetMajorType(media_type, &major_type)))
+        goto fail;
+
+    if (IsEqualGUID(&major_type, &MFMediaType_Audio))
+        hr = MFCreateWaveFormatExFromMFMediaType(media_type, (WAVEFORMATEX **)&format_ptr,
+                                                  &format_size, MFWaveFormatExConvertFlag_Normal);
+    else if (IsEqualGUID(&major_type, &MFMediaType_Video))
+        hr = MFCreateMFVideoFormatFromMFMediaType(media_type, (MFVIDEOFORMAT **)&format_ptr, &format_size);
+    else
+        hr = E_INVALIDARG;
+
+    if (FAILED(hr)) goto fail;
+
+    status = winedmo_muxer_add_stream(media_sink->muxer, stream_sink_id, &major_type,
+                                       (union winedmo_format *)format_ptr, format_size);
+    CoTaskMemFree(format_ptr);
+    if (FAILED(hr = HRESULT_FROM_NT(status))) goto fail;
 
     list_add_tail(&media_sink->stream_sinks, &object->entry);
 
@@ -808,6 +829,11 @@ static HRESULT WINAPI media_sink_AddStreamSink(IMFFinalizableMediaSink *iface, D
         IMFStreamSink_AddRef((*stream_sink = &object->IMFStreamSink_iface));
 
     return S_OK;
+
+fail:
+    LeaveCriticalSection(&media_sink->cs);
+    IMFStreamSink_Release(&object->IMFStreamSink_iface);
+    return hr;
 }
 
 static HRESULT WINAPI media_sink_RemoveStreamSink(IMFFinalizableMediaSink *iface, DWORD stream_sink_id)
@@ -1246,7 +1272,7 @@ static HRESULT media_sink_create(IMFByteStream *bytestream, const char *format, 
     if (!(media_sink = calloc(1, sizeof(*media_sink))))
         return E_OUTOFMEMORY;
 
-    if (FAILED(hr = wg_muxer_create(format, &media_sink->muxer)))
+    if (FAILED(hr = HRESULT_FROM_NT(winedmo_muxer_create(format, &media_sink->muxer))))
         goto fail;
     if (FAILED(hr = MFCreateEventQueue(&media_sink->event_queue)))
         goto fail;
@@ -1268,8 +1294,8 @@ static HRESULT media_sink_create(IMFByteStream *bytestream, const char *format, 
     return S_OK;
 
 fail:
-    if (media_sink->muxer)
-        wg_muxer_destroy(media_sink->muxer);
+    if (media_sink->muxer.handle)
+        winedmo_muxer_destroy(media_sink->muxer);
     free(media_sink);
     return hr;
 }
@@ -1338,7 +1364,7 @@ static HRESULT WINAPI sink_class_factory_create_media_sink(IMFSinkClassFactory *
 static HRESULT WINAPI mp3_sink_class_factory_CreateMediaSink(IMFSinkClassFactory *iface, IMFByteStream *bytestream,
         IMFMediaType *video_type, IMFMediaType *audio_type, IMFMediaSink **out)
 {
-    const char *format = "application/x-id3";
+    const char *format = "mp3";
 
     return sink_class_factory_create_media_sink(iface, bytestream, format, video_type, audio_type, out);
 }
@@ -1346,7 +1372,7 @@ static HRESULT WINAPI mp3_sink_class_factory_CreateMediaSink(IMFSinkClassFactory
 static HRESULT WINAPI mpeg4_sink_class_factory_CreateMediaSink(IMFSinkClassFactory *iface, IMFByteStream *bytestream,
         IMFMediaType *video_type, IMFMediaType *audio_type, IMFMediaSink **out)
 {
-    const char *format = "video/quicktime, variant=iso";
+    const char *format = "mp4";
 
     return sink_class_factory_create_media_sink(iface, bytestream, format, video_type, audio_type, out);
 }

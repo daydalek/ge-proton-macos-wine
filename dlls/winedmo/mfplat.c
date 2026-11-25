@@ -17,7 +17,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include "gst_private.h"
+#include "winedmo_private.h"
 
 #include "ks.h"
 #include "ksmedia.h"
@@ -39,16 +39,19 @@ DEFINE_GUID(DMOVideoFormat_RGB565,D3DFMT_R5G6B5,0x524f,0x11ce,0x9f,0x53,0x00,0x2
 DEFINE_GUID(DMOVideoFormat_RGB555,D3DFMT_X1R5G5B5,0x524f,0x11ce,0x9f,0x53,0x00,0x20,0xaf,0x0b,0xa7,0x70);
 DEFINE_GUID(DMOVideoFormat_RGB8,D3DFMT_P8,0x524f,0x11ce,0x9f,0x53,0x00,0x20,0xaf,0x0b,0xa7,0x70);
 DEFINE_MEDIATYPE_GUID(MFAudioFormat_RAW_AAC,WAVE_FORMAT_RAW_AAC1);
+DEFINE_MEDIATYPE_GUID(MFAudioFormat_XMAudio2, 0x0166);
 DEFINE_MEDIATYPE_GUID(MFVideoFormat_VC1S,MAKEFOURCC('V','C','1','S'));
 DEFINE_MEDIATYPE_GUID(MFVideoFormat_IV50,MAKEFOURCC('I','V','5','0'));
 DEFINE_MEDIATYPE_GUID(MFVideoFormat_ABGR32,D3DFMT_A8B8G8R8);
 DEFINE_GUID(MEDIASUBTYPE_WMV_Unknown, 0x7ce12ca9,0xbfbf,0x43d9,0x9d,0x00,0x82,0xb8,0xed,0x54,0x31,0x6b);
+DEFINE_MEDIATYPE_GUID(MFVideoFormat_theora,MAKEFOURCC('t','h','e','o'));
 
 struct class_factory
 {
     IClassFactory IClassFactory_iface;
     LONG refcount;
     HRESULT (*create_instance)(REFIID riid, void **obj);
+    HRESULT (*create_aggregated_instance)(IUnknown *outer, REFIID riid, void **obj);
 };
 
 static struct class_factory *impl_from_IClassFactory(IClassFactory *iface)
@@ -96,6 +99,15 @@ static HRESULT WINAPI class_factory_CreateInstance(IClassFactory *iface, IUnknow
 
     TRACE("%p, %p, %s, %p.\n", iface, outer, debugstr_guid(riid), obj);
 
+    if (outer && !IsEqualGUID(riid, &IID_IUnknown))
+    {
+        *obj = NULL;
+        return CLASS_E_NOAGGREGATION;
+    }
+
+    if (outer && factory->create_aggregated_instance)
+        return factory->create_aggregated_instance(outer, riid, obj);
+
     if (outer)
     {
         *obj = NULL;
@@ -120,24 +132,30 @@ static const IClassFactoryVtbl class_factory_vtbl =
     class_factory_LockServer,
 };
 
-static const GUID CLSID_GStreamerByteStreamHandler = {0x317df618, 0x5e5a, 0x468a, {0x9f, 0x15, 0xd8, 0x27, 0xa9, 0xa0, 0x81, 0x62}};
-static const GUID CLSID_wg_video_processor = {0xd527607f,0x89cb,0x4e94,{0x95,0x71,0xbc,0xfe,0x62,0x17,0x56,0x13}};
-static const GUID CLSID_wg_aac_decoder = {0xe7889a8a,0x2083,0x4844,{0x83,0x70,0x5e,0xe3,0x49,0xb1,0x45,0x03}};
-static const GUID CLSID_wg_h264_decoder = {0x1f1e273d,0x12c0,0x4b3a,{0x8e,0x9b,0x19,0x33,0xc2,0x49,0x8a,0xea}};
-static const GUID CLSID_wg_h264_encoder = {0x6c34de69,0x4670,0x46cd,{0x8c,0xb4,0x1f,0x2f,0xa1,0xdf,0xfb,0x65}};
+static const GUID CLSID_WineDMOAudioDecoder = {0x480b1517, 0xc8e9, 0x4eae, {0xb0, 0x06, 0xe6, 0x30, 0x07, 0x18, 0xd8, 0x5d}};
+static const GUID CLSID_WineDMOByteStreamHandler = {0x317df618, 0x5e5a, 0x468a, {0x9f, 0x15, 0xd8, 0x27, 0xa9, 0xa0, 0x81, 0x62}};
+static const GUID CLSID_winedmo_video_processor = {0xd527607f,0x89cb,0x4e94,{0x95,0x71,0xbc,0xfe,0x62,0x17,0x56,0x13}};
+static const GUID CLSID_winedmo_aac_decoder = {0xe7889a8a,0x2083,0x4844,{0x83,0x70,0x5e,0xe3,0x49,0xb1,0x45,0x03}};
+static const GUID CLSID_winedmo_h264_decoder = {0x1f1e273d,0x12c0,0x4b3a,{0x8e,0x9b,0x19,0x33,0xc2,0x49,0x8a,0xea}};
+static const GUID CLSID_winedmo_h264_encoder = {0x6c34de69,0x4670,0x46cd,{0x8c,0xb4,0x1f,0x2f,0xa1,0xdf,0xfb,0x65}};
+
+static const GUID CLSID_WineDMOSchemePlugin = {0x587eeb6a,0x7336,0x4ebd,{0xa4,0xf2,0x91,0xc9,0x48,0xde,0x62,0x2c}};
 
 static const struct class_object
 {
     const GUID *clsid;
     HRESULT (*create_instance)(REFIID riid, void **obj);
+    HRESULT (*create_aggregated_instance)(IUnknown *outer, REFIID riid, void **obj);
 }
 class_objects[] =
 {
-    { &CLSID_wg_video_processor, &video_processor_create },
-    { &CLSID_GStreamerByteStreamHandler, &gstreamer_byte_stream_handler_create },
-    { &CLSID_wg_aac_decoder, &aac_decoder_create },
-    { &CLSID_wg_h264_decoder, &h264_decoder_create },
-    { &CLSID_wg_h264_encoder, &h264_encoder_create },
+    { &CLSID_winedmo_video_processor, &video_processor_create },
+    { &CLSID_WineDMOAudioDecoder, &audio_decoder_create },
+    { &CLSID_WineDMOByteStreamHandler, &winedmo_byte_stream_handler_create },
+    { &CLSID_WineDMOSchemePlugin, &winedmo_scheme_handler_create },
+    { &CLSID_winedmo_aac_decoder, &aac_decoder_create },
+    { &CLSID_winedmo_h264_decoder, &h264_decoder_create, &h264_decoder_create_aggregated },
+    { &CLSID_winedmo_h264_encoder, &h264_encoder_create },
 };
 
 HRESULT mfplat_get_class_object(REFCLSID rclsid, REFIID riid, void **obj)
@@ -156,6 +174,7 @@ HRESULT mfplat_get_class_object(REFCLSID rclsid, REFIID riid, void **obj)
             factory->IClassFactory_iface.lpVtbl = &class_factory_vtbl;
             factory->refcount = 1;
             factory->create_instance = class_objects[i].create_instance;
+            factory->create_aggregated_instance = class_objects[i].create_aggregated_instance;
 
             hr = IClassFactory_QueryInterface(&factory->IClassFactory_iface, riid, obj);
             IClassFactory_Release(&factory->IClassFactory_iface);
@@ -169,41 +188,41 @@ HRESULT mfplat_get_class_object(REFCLSID rclsid, REFIID riid, void **obj)
 static const struct
 {
     const GUID *subtype;
-    enum wg_video_format format;
+    enum winedmo_video_format format;
 }
 video_formats[] =
 {
-    {&MFVideoFormat_ARGB32, WG_VIDEO_FORMAT_BGRA},
-    {&MFVideoFormat_RGB32,  WG_VIDEO_FORMAT_BGRx},
-    {&MFVideoFormat_RGB24,  WG_VIDEO_FORMAT_BGR},
-    {&MFVideoFormat_RGB555, WG_VIDEO_FORMAT_RGB15},
-    {&MFVideoFormat_RGB565, WG_VIDEO_FORMAT_RGB16},
-    {&MFVideoFormat_ABGR32, WG_VIDEO_FORMAT_RGBA},
-    {&MFVideoFormat_AYUV,   WG_VIDEO_FORMAT_AYUV},
-    {&MFVideoFormat_I420,   WG_VIDEO_FORMAT_I420},
-    {&MFVideoFormat_IYUV,   WG_VIDEO_FORMAT_I420},
-    {&MFVideoFormat_NV12,   WG_VIDEO_FORMAT_NV12},
-    {&MFVideoFormat_P010,   WG_VIDEO_FORMAT_P010_10LE},
-    {&MFVideoFormat_UYVY,   WG_VIDEO_FORMAT_UYVY},
-    {&MFVideoFormat_YUY2,   WG_VIDEO_FORMAT_YUY2},
-    {&MFVideoFormat_YV12,   WG_VIDEO_FORMAT_YV12},
-    {&MFVideoFormat_YVYU,   WG_VIDEO_FORMAT_YVYU},
+    {&MFVideoFormat_ARGB32, WINEDMO_VIDEO_FORMAT_BGRA},
+    {&MFVideoFormat_RGB32,  WINEDMO_VIDEO_FORMAT_BGRx},
+    {&MFVideoFormat_RGB24,  WINEDMO_VIDEO_FORMAT_BGR},
+    {&MFVideoFormat_RGB555, WINEDMO_VIDEO_FORMAT_RGB15},
+    {&MFVideoFormat_RGB565, WINEDMO_VIDEO_FORMAT_RGB16},
+    {&MFVideoFormat_ABGR32, WINEDMO_VIDEO_FORMAT_RGBA},
+    {&MFVideoFormat_AYUV,   WINEDMO_VIDEO_FORMAT_AYUV},
+    {&MFVideoFormat_I420,   WINEDMO_VIDEO_FORMAT_I420},
+    {&MFVideoFormat_IYUV,   WINEDMO_VIDEO_FORMAT_I420},
+    {&MFVideoFormat_NV12,   WINEDMO_VIDEO_FORMAT_NV12},
+    {&MFVideoFormat_P010,   WINEDMO_VIDEO_FORMAT_P010_10LE},
+    {&MFVideoFormat_UYVY,   WINEDMO_VIDEO_FORMAT_UYVY},
+    {&MFVideoFormat_YUY2,   WINEDMO_VIDEO_FORMAT_YUY2},
+    {&MFVideoFormat_YV12,   WINEDMO_VIDEO_FORMAT_YV12},
+    {&MFVideoFormat_YVYU,   WINEDMO_VIDEO_FORMAT_YVYU},
 };
 
 static const struct
 {
     const GUID *subtype;
     UINT32 depth;
-    enum wg_audio_format format;
+    enum winedmo_audio_format format;
 }
 audio_formats[] =
 {
-    {&MFAudioFormat_PCM,     8, WG_AUDIO_FORMAT_U8},
-    {&MFAudioFormat_PCM,    16, WG_AUDIO_FORMAT_S16LE},
-    {&MFAudioFormat_PCM,    24, WG_AUDIO_FORMAT_S24LE},
-    {&MFAudioFormat_PCM,    32, WG_AUDIO_FORMAT_S32LE},
-    {&MFAudioFormat_Float,  32, WG_AUDIO_FORMAT_F32LE},
-    {&MFAudioFormat_Float,  64, WG_AUDIO_FORMAT_F64LE},
+    {&MFAudioFormat_PCM,     8, WINEDMO_AUDIO_FORMAT_U8},
+    {&MFAudioFormat_PCM,    16, WINEDMO_AUDIO_FORMAT_S16LE},
+    {&MFAudioFormat_PCM,    24, WINEDMO_AUDIO_FORMAT_S24LE},
+    {&MFAudioFormat_PCM,    32, WINEDMO_AUDIO_FORMAT_S32LE},
+    {&MFAudioFormat_Float,  32, WINEDMO_AUDIO_FORMAT_F32LE},
+    {&MFAudioFormat_Float,  64, WINEDMO_AUDIO_FORMAT_F64LE},
 };
 
 static inline UINT64 make_uint64(UINT32 high, UINT32 low)
@@ -211,7 +230,7 @@ static inline UINT64 make_uint64(UINT32 high, UINT32 low)
     return ((UINT64)high << 32) | low;
 }
 
-static IMFMediaType *mf_media_type_from_wg_format_audio(const struct wg_format *format)
+static IMFMediaType *mf_media_type_from_winedmo_format_audio(const struct winedmo_codec_format *format)
 {
     unsigned int i, block_align;
     IMFMediaType *type;
@@ -243,7 +262,7 @@ static IMFMediaType *mf_media_type_from_wg_format_audio(const struct wg_format *
     return NULL;
 }
 
-static IMFMediaType *mf_media_type_from_wg_format_video(const struct wg_format *format)
+static IMFMediaType *mf_media_type_from_winedmo_format_video(const struct winedmo_codec_format *format)
 {
     IMFMediaType *type;
     unsigned int i;
@@ -252,7 +271,7 @@ static IMFMediaType *mf_media_type_from_wg_format_video(const struct wg_format *
     {
         if (format->u.video.format == video_formats[i].format)
         {
-            unsigned int stride = wg_format_get_stride(format);
+            unsigned int stride = winedmo_format_get_stride(format);
             int32_t height = abs(format->u.video.height);
             int32_t width = format->u.video.width;
 
@@ -299,7 +318,7 @@ static IMFMediaType *mf_media_type_from_wg_format_video(const struct wg_format *
     return NULL;
 }
 
-static IMFMediaType *mf_media_type_from_wg_format_audio_mpeg1(const struct wg_format *format)
+static IMFMediaType *mf_media_type_from_winedmo_format_audio_mpeg1(const struct winedmo_codec_format *format)
 {
     IMFMediaType *type;
 
@@ -321,7 +340,7 @@ static IMFMediaType *mf_media_type_from_wg_format_audio_mpeg1(const struct wg_fo
     return type;
 }
 
-static IMFMediaType *mf_media_type_from_wg_format_audio_mpeg4(const struct wg_format *format)
+static IMFMediaType *mf_media_type_from_winedmo_format_audio_mpeg4(const struct winedmo_codec_format *format)
 {
     IMFMediaType *type;
 
@@ -344,7 +363,7 @@ static IMFMediaType *mf_media_type_from_wg_format_audio_mpeg4(const struct wg_fo
     return type;
 }
 
-static IMFMediaType *mf_media_type_from_wg_format_h264(const struct wg_format *format)
+static IMFMediaType *mf_media_type_from_winedmo_format_h264(const struct winedmo_codec_format *format)
 {
     IMFMediaType *type;
 
@@ -365,7 +384,7 @@ static IMFMediaType *mf_media_type_from_wg_format_h264(const struct wg_format *f
     return type;
 }
 
-static IMFMediaType *mf_media_type_from_wg_format_wmv(const struct wg_format *format)
+static IMFMediaType *mf_media_type_from_winedmo_format_wmv(const struct winedmo_codec_format *format)
 {
     IMFMediaType *type;
 
@@ -374,15 +393,15 @@ static IMFMediaType *mf_media_type_from_wg_format_wmv(const struct wg_format *fo
 
     IMFMediaType_SetGUID(type, &MF_MT_MAJOR_TYPE, &MFMediaType_Video);
 
-    if (format->u.video.format == WG_VIDEO_FORMAT_WMV1)
+    if (format->u.video.format == WINEDMO_VIDEO_FORMAT_WMV1)
         IMFMediaType_SetGUID(type, &MF_MT_SUBTYPE, &MEDIASUBTYPE_WMV1);
-    else if (format->u.video.format == WG_VIDEO_FORMAT_WMV2)
+    else if (format->u.video.format == WINEDMO_VIDEO_FORMAT_WMV2)
         IMFMediaType_SetGUID(type, &MF_MT_SUBTYPE, &MEDIASUBTYPE_WMV2);
-    else if (format->u.video.format == WG_VIDEO_FORMAT_WMV3)
+    else if (format->u.video.format == WINEDMO_VIDEO_FORMAT_WMV3)
         IMFMediaType_SetGUID(type, &MF_MT_SUBTYPE, &MEDIASUBTYPE_WMV3);
-    else if (format->u.video.format == WG_VIDEO_FORMAT_WMVA)
+    else if (format->u.video.format == WINEDMO_VIDEO_FORMAT_WMVA)
         IMFMediaType_SetGUID(type, &MF_MT_SUBTYPE, &MEDIASUBTYPE_WMVA);
-    else if (format->u.video.format == WG_VIDEO_FORMAT_WVC1)
+    else if (format->u.video.format == WINEDMO_VIDEO_FORMAT_WVC1)
         IMFMediaType_SetGUID(type, &MF_MT_SUBTYPE, &MEDIASUBTYPE_WVC1);
     else
         FIXME("Unhandled format %#x.\n", format->u.video.format);
@@ -397,7 +416,7 @@ static IMFMediaType *mf_media_type_from_wg_format_wmv(const struct wg_format *fo
     return type;
 }
 
-static IMFMediaType *mf_media_type_from_wg_format_wma(const struct wg_format *format)
+static IMFMediaType *mf_media_type_from_winedmo_format_wma(const struct winedmo_codec_format *format)
 {
     IMFMediaType *type;
 
@@ -428,45 +447,45 @@ static IMFMediaType *mf_media_type_from_wg_format_wma(const struct wg_format *fo
     return type;
 }
 
-IMFMediaType *mf_media_type_from_wg_format(const struct wg_format *format)
+IMFMediaType *mf_media_type_from_winedmo_format(const struct winedmo_codec_format *format)
 {
     switch (format->major_type)
     {
-        case WG_MAJOR_TYPE_VIDEO_CINEPAK:
-        case WG_MAJOR_TYPE_VIDEO_INDEO:
-        case WG_MAJOR_TYPE_VIDEO_MPEG1:
+        case WINEDMO_MAJOR_TYPE_VIDEO_CINEPAK:
+        case WINEDMO_MAJOR_TYPE_VIDEO_INDEO:
+        case WINEDMO_MAJOR_TYPE_VIDEO_MPEG1:
             FIXME("Format %u not implemented!\n", format->major_type);
             /* fallthrough */
-        case WG_MAJOR_TYPE_UNKNOWN:
+        case WINEDMO_MAJOR_TYPE_UNKNOWN:
             return NULL;
 
-        case WG_MAJOR_TYPE_AUDIO:
-            return mf_media_type_from_wg_format_audio(format);
+        case WINEDMO_MAJOR_TYPE_AUDIO:
+            return mf_media_type_from_winedmo_format_audio(format);
 
-        case WG_MAJOR_TYPE_VIDEO:
-            return mf_media_type_from_wg_format_video(format);
+        case WINEDMO_MAJOR_TYPE_VIDEO:
+            return mf_media_type_from_winedmo_format_video(format);
 
-        case WG_MAJOR_TYPE_VIDEO_H264:
-            return mf_media_type_from_wg_format_h264(format);
+        case WINEDMO_MAJOR_TYPE_VIDEO_H264:
+            return mf_media_type_from_winedmo_format_h264(format);
 
-        case WG_MAJOR_TYPE_AUDIO_MPEG1:
-            return mf_media_type_from_wg_format_audio_mpeg1(format);
+        case WINEDMO_MAJOR_TYPE_AUDIO_MPEG1:
+            return mf_media_type_from_winedmo_format_audio_mpeg1(format);
 
-        case WG_MAJOR_TYPE_AUDIO_MPEG4:
-            return mf_media_type_from_wg_format_audio_mpeg4(format);
+        case WINEDMO_MAJOR_TYPE_AUDIO_MPEG4:
+            return mf_media_type_from_winedmo_format_audio_mpeg4(format);
 
-        case WG_MAJOR_TYPE_VIDEO_WMV:
-            return mf_media_type_from_wg_format_wmv(format);
+        case WINEDMO_MAJOR_TYPE_VIDEO_WMV:
+            return mf_media_type_from_winedmo_format_wmv(format);
 
-        case WG_MAJOR_TYPE_AUDIO_WMA:
-            return mf_media_type_from_wg_format_wma(format);
+        case WINEDMO_MAJOR_TYPE_AUDIO_WMA:
+            return mf_media_type_from_winedmo_format_wma(format);
     }
 
     assert(0);
     return NULL;
 }
 
-static void mf_media_type_to_wg_format_audio(IMFMediaType *type, const GUID *subtype, struct wg_format *format)
+static void mf_media_type_to_winedmo_format_audio(IMFMediaType *type, const GUID *subtype, struct winedmo_codec_format *format)
 {
     UINT32 rate, channels, channel_mask, depth;
     unsigned int i;
@@ -492,6 +511,10 @@ static void mf_media_type_to_wg_format_audio(IMFMediaType *type, const GUID *sub
             channel_mask = KSAUDIO_SPEAKER_MONO;
         else if (channels == 2)
             channel_mask = KSAUDIO_SPEAKER_STEREO;
+        else if (channels == 6)
+            channel_mask = KSAUDIO_SPEAKER_5POINT1;
+        else if (channels == 8)
+            channel_mask = KSAUDIO_SPEAKER_7POINT1;
         else
         {
             FIXME("Channel mask is not set.\n");
@@ -499,7 +522,7 @@ static void mf_media_type_to_wg_format_audio(IMFMediaType *type, const GUID *sub
         }
     }
 
-    format->major_type = WG_MAJOR_TYPE_AUDIO;
+    format->major_type = WINEDMO_MAJOR_TYPE_AUDIO;
     format->u.audio.channels = channels;
     format->u.audio.channel_mask = channel_mask;
     format->u.audio.rate = rate;
@@ -515,7 +538,7 @@ static void mf_media_type_to_wg_format_audio(IMFMediaType *type, const GUID *sub
     FIXME("Unrecognized audio subtype %s, depth %u.\n", debugstr_guid(subtype), depth);
 }
 
-static void mf_media_type_to_wg_format_audio_mpeg(IMFMediaType *type, const GUID *subtype, struct wg_format *format)
+static void mf_media_type_to_winedmo_format_audio_mpeg(IMFMediaType *type, const GUID *subtype, struct winedmo_codec_format *format)
 {
     MPEG1WAVEFORMAT wfx = {0};
     UINT32 codec_data_size;
@@ -543,13 +566,13 @@ static void mf_media_type_to_wg_format_audio_mpeg(IMFMediaType *type, const GUID
         return;
     }
 
-    format->major_type = WG_MAJOR_TYPE_AUDIO_MPEG1;
+    format->major_type = WINEDMO_MAJOR_TYPE_AUDIO_MPEG1;
     format->u.audio.channels = channels;
     format->u.audio.rate = rate;
     format->u.audio.layer = wfx.fwHeadLayer;
 }
 
-static void mf_media_type_to_wg_format_audio_mpeg_layer3(IMFMediaType *type, const GUID *subtype, struct wg_format *format)
+static void mf_media_type_to_winedmo_format_audio_mpeg_layer3(IMFMediaType *type, const GUID *subtype, struct winedmo_codec_format *format)
 {
     UINT32 rate, channels;
 
@@ -564,13 +587,13 @@ static void mf_media_type_to_wg_format_audio_mpeg_layer3(IMFMediaType *type, con
         return;
     }
 
-    format->major_type = WG_MAJOR_TYPE_AUDIO_MPEG1;
+    format->major_type = WINEDMO_MAJOR_TYPE_AUDIO_MPEG1;
     format->u.audio.channels = channels;
     format->u.audio.rate = rate;
     format->u.audio.layer = 3;
 }
 
-static void mf_media_type_to_wg_format_audio_mpeg4(IMFMediaType *type, const GUID *subtype, struct wg_format *format)
+static void mf_media_type_to_winedmo_format_audio_mpeg4(IMFMediaType *type, const GUID *subtype, struct winedmo_codec_format *format)
 {
     BYTE buffer[sizeof(HEAACWAVEFORMAT) + 64];
     HEAACWAVEFORMAT *wfx = (HEAACWAVEFORMAT *)buffer;
@@ -598,7 +621,7 @@ static void mf_media_type_to_wg_format_audio_mpeg4(IMFMediaType *type, const GUI
     else
         memcpy(format->u.audio.codec_data, wfx->pbAudioSpecificConfig, codec_data_size);
 
-    format->major_type = WG_MAJOR_TYPE_AUDIO_MPEG4;
+    format->major_type = WINEDMO_MAJOR_TYPE_AUDIO_MPEG4;
 
     if (FAILED(IMFMediaType_GetUINT32(type, &MF_MT_AAC_PAYLOAD_TYPE, &format->u.audio.payload_type)))
         format->u.audio.payload_type = 0;
@@ -606,7 +629,7 @@ static void mf_media_type_to_wg_format_audio_mpeg4(IMFMediaType *type, const GUI
     format->u.audio.codec_data_len = codec_data_size;
 }
 
-static enum wg_video_format mf_video_format_to_wg(const GUID *subtype)
+static enum winedmo_video_format mf_video_format_to_wg(const GUID *subtype)
 {
     unsigned int i;
 
@@ -616,10 +639,10 @@ static enum wg_video_format mf_video_format_to_wg(const GUID *subtype)
             return video_formats[i].format;
     }
     FIXME("Unrecognized video subtype %s.\n", debugstr_guid(subtype));
-    return WG_VIDEO_FORMAT_UNKNOWN;
+    return WINEDMO_VIDEO_FORMAT_UNKNOWN;
 }
 
-static void mf_media_type_to_wg_format_video(IMFMediaType *type, const GUID *subtype, struct wg_format *format)
+static void mf_media_type_to_winedmo_format_video(IMFMediaType *type, const GUID *subtype, struct winedmo_codec_format *format)
 {
     UINT64 frame_rate, frame_size;
     MFVideoArea aperture;
@@ -631,7 +654,7 @@ static void mf_media_type_to_wg_format_video(IMFMediaType *type, const GUID *sub
         return;
     }
 
-    format->major_type = WG_MAJOR_TYPE_VIDEO;
+    format->major_type = WINEDMO_MAJOR_TYPE_VIDEO;
     format->u.video.width = (UINT32)(frame_size >> 32);
     format->u.video.height = (UINT32)frame_size;
     format->u.video.fps_n = 1;
@@ -659,16 +682,17 @@ static void mf_media_type_to_wg_format_video(IMFMediaType *type, const GUID *sub
         if ((int)stride < 0)
             format->u.video.height = -format->u.video.height;
     }
-    else if (wg_video_format_is_rgb(format->u.video.format))
+    else if (winedmo_video_format_is_rgb(format->u.video.format))
     {
         format->u.video.height = -format->u.video.height;
     }
 }
 
-static void mf_media_type_to_wg_format_audio_wma(IMFMediaType *type, const GUID *subtype, struct wg_format *format)
+static void mf_media_type_to_winedmo_format_audio_wma(IMFMediaType *type, const GUID *subtype, struct winedmo_codec_format *format)
 {
     UINT32 rate, depth, channels, block_align, bytes_per_second, codec_data_len;
     BYTE codec_data[64];
+    bool is_xma = false;
     UINT32 version;
 
     if (FAILED(IMFMediaType_GetUINT32(type, &MF_MT_AUDIO_SAMPLES_PER_SECOND, &rate)))
@@ -710,13 +734,18 @@ static void mf_media_type_to_wg_format_audio_wma(IMFMediaType *type, const GUID 
         version = 3;
     else if (IsEqualGUID(subtype, &MFAudioFormat_WMAudio_Lossless))
         version = 4;
+    else if (IsEqualGUID(subtype, &MFAudioFormat_XMAudio2))
+    {
+        version = 2;
+        is_xma = true;
+    }
     else
     {
         assert(0);
         return;
     }
 
-    format->major_type = WG_MAJOR_TYPE_AUDIO_WMA;
+    format->major_type = WINEDMO_MAJOR_TYPE_AUDIO_WMA;
     format->u.audio.version = version;
     format->u.audio.bitrate = bytes_per_second * 8;
     format->u.audio.rate = rate;
@@ -725,16 +754,17 @@ static void mf_media_type_to_wg_format_audio_wma(IMFMediaType *type, const GUID 
     format->u.audio.block_align = block_align;
     format->u.audio.codec_data_len = codec_data_len;
     memcpy(format->u.audio.codec_data, codec_data, codec_data_len);
+    format->u.audio.is_xma = is_xma;
 }
 
-static void mf_media_type_to_wg_format_video_h264(IMFMediaType *type, struct wg_format *format)
+static void mf_media_type_to_winedmo_format_video_h264(IMFMediaType *type, struct winedmo_codec_format *format)
 {
     UINT32 profile, level, codec_data_len;
     UINT64 frame_rate, frame_size;
     BYTE *codec_data;
 
     memset(format, 0, sizeof(*format));
-    format->major_type = WG_MAJOR_TYPE_VIDEO_H264;
+    format->major_type = WINEDMO_MAJOR_TYPE_VIDEO_H264;
 
     if (SUCCEEDED(IMFMediaType_GetUINT64(type, &MF_MT_FRAME_SIZE, &frame_size)))
     {
@@ -774,12 +804,12 @@ static void mf_media_type_to_wg_format_video_h264(IMFMediaType *type, struct wg_
     }
 }
 
-static void mf_media_type_to_wg_format_video_indeo(IMFMediaType *type, uint32_t version, struct wg_format *format)
+static void mf_media_type_to_winedmo_format_video_indeo(IMFMediaType *type, uint32_t version, struct winedmo_codec_format *format)
 {
     UINT64 frame_rate, frame_size;
 
     memset(format, 0, sizeof(*format));
-    format->major_type = WG_MAJOR_TYPE_VIDEO_INDEO;
+    format->major_type = WINEDMO_MAJOR_TYPE_VIDEO_INDEO;
 
     if (SUCCEEDED(IMFMediaType_GetUINT64(type, &MF_MT_FRAME_SIZE, &frame_size)))
     {
@@ -801,14 +831,14 @@ static void mf_media_type_to_wg_format_video_indeo(IMFMediaType *type, uint32_t 
     format->u.video.version = version;
 }
 
-static void mf_media_type_to_wg_format_video_wmv(IMFMediaType *type, const GUID *subtype, struct wg_format *format)
+static void mf_media_type_to_winedmo_format_video_wmv(IMFMediaType *type, const GUID *subtype, struct winedmo_codec_format *format)
 {
     UINT64 frame_rate, frame_size;
     UINT32 codec_data_len;
     BYTE *codec_data;
 
     memset(format, 0, sizeof(*format));
-    format->major_type = WG_MAJOR_TYPE_VIDEO_WMV;
+    format->major_type = WINEDMO_MAJOR_TYPE_VIDEO_WMV;
 
     if (SUCCEEDED(IMFMediaType_GetUINT64(type, &MF_MT_FRAME_SIZE, &frame_size)))
     {
@@ -828,17 +858,17 @@ static void mf_media_type_to_wg_format_video_wmv(IMFMediaType *type, const GUID 
     }
 
     if (IsEqualGUID(subtype, &MEDIASUBTYPE_WMV1))
-        format->u.video.format = WG_VIDEO_FORMAT_WMV1;
+        format->u.video.format = WINEDMO_VIDEO_FORMAT_WMV1;
     else if (IsEqualGUID(subtype, &MEDIASUBTYPE_WMV2))
-        format->u.video.format = WG_VIDEO_FORMAT_WMV2;
+        format->u.video.format = WINEDMO_VIDEO_FORMAT_WMV2;
     else if (IsEqualGUID(subtype, &MEDIASUBTYPE_WMV3))
-        format->u.video.format = WG_VIDEO_FORMAT_WMV3;
+        format->u.video.format = WINEDMO_VIDEO_FORMAT_WMV3;
     else if (IsEqualGUID(subtype, &MEDIASUBTYPE_WMVA))
-        format->u.video.format = WG_VIDEO_FORMAT_WMVA;
+        format->u.video.format = WINEDMO_VIDEO_FORMAT_WMVA;
     else if (IsEqualGUID(subtype, &MEDIASUBTYPE_WVC1))
-        format->u.video.format = WG_VIDEO_FORMAT_WVC1;
+        format->u.video.format = WINEDMO_VIDEO_FORMAT_WVC1;
     else
-        format->u.video.format = WG_VIDEO_FORMAT_UNKNOWN;
+        format->u.video.format = WINEDMO_VIDEO_FORMAT_UNKNOWN;
 
     if (SUCCEEDED(IMFMediaType_GetAllocatedBlob(type, &MF_MT_USER_DATA, &codec_data, &codec_data_len)))
     {
@@ -855,7 +885,7 @@ static void mf_media_type_to_wg_format_video_wmv(IMFMediaType *type, const GUID 
     }
 }
 
-void mf_media_type_to_wg_format(IMFMediaType *type, struct wg_format *format)
+void mf_media_type_to_winedmo_format(IMFMediaType *type, struct winedmo_codec_format *format)
 {
     GUID major_type, subtype;
 
@@ -875,25 +905,26 @@ void mf_media_type_to_wg_format(IMFMediaType *type, struct wg_format *format)
     if (IsEqualGUID(&major_type, &MFMediaType_Audio))
     {
         if (IsEqualGUID(&subtype, &MFAudioFormat_MPEG))
-            mf_media_type_to_wg_format_audio_mpeg(type, &subtype, format);
+            mf_media_type_to_winedmo_format_audio_mpeg(type, &subtype, format);
         else if (IsEqualGUID(&subtype, &MFAudioFormat_MP3))
-            mf_media_type_to_wg_format_audio_mpeg_layer3(type, &subtype, format);
+            mf_media_type_to_winedmo_format_audio_mpeg_layer3(type, &subtype, format);
         else if (IsEqualGUID(&subtype, &MEDIASUBTYPE_MSAUDIO1) ||
                 IsEqualGUID(&subtype, &MFAudioFormat_WMAudioV8) ||
                 IsEqualGUID(&subtype, &MFAudioFormat_WMAudioV9) ||
-                IsEqualGUID(&subtype, &MFAudioFormat_WMAudio_Lossless))
-            mf_media_type_to_wg_format_audio_wma(type, &subtype, format);
+                IsEqualGUID(&subtype, &MFAudioFormat_WMAudio_Lossless) ||
+                IsEqualGUID(&subtype, &MFAudioFormat_XMAudio2))
+            mf_media_type_to_winedmo_format_audio_wma(type, &subtype, format);
         else if (IsEqualGUID(&subtype, &MFAudioFormat_AAC) || IsEqualGUID(&subtype, &MFAudioFormat_RAW_AAC))
-            mf_media_type_to_wg_format_audio_mpeg4(type, &subtype, format);
+            mf_media_type_to_winedmo_format_audio_mpeg4(type, &subtype, format);
         else
-            mf_media_type_to_wg_format_audio(type, &subtype, format);
+            mf_media_type_to_winedmo_format_audio(type, &subtype, format);
     }
     else if (IsEqualGUID(&major_type, &MFMediaType_Video))
     {
         if (IsEqualGUID(&subtype, &MFVideoFormat_H264))
-            mf_media_type_to_wg_format_video_h264(type, format);
+            mf_media_type_to_winedmo_format_video_h264(type, format);
         else if (IsEqualGUID(&subtype, &MFVideoFormat_IV50))
-            mf_media_type_to_wg_format_video_indeo(type, 5, format);
+            mf_media_type_to_winedmo_format_video_indeo(type, 5, format);
         else if (IsEqualGUID(&subtype, &MEDIASUBTYPE_WMV1)
                 || IsEqualGUID(&subtype, &MEDIASUBTYPE_WMV2)
                 || IsEqualGUID(&subtype, &MEDIASUBTYPE_WMVA)
@@ -903,9 +934,9 @@ void mf_media_type_to_wg_format(IMFMediaType *type, struct wg_format *format)
                 || IsEqualGUID(&subtype, &MEDIASUBTYPE_WVC1)
                 || IsEqualGUID(&subtype, &MEDIASUBTYPE_WMV3)
                 || IsEqualGUID(&subtype, &MFVideoFormat_VC1S))
-            mf_media_type_to_wg_format_video_wmv(type, &subtype, format);
+            mf_media_type_to_winedmo_format_video_wmv(type, &subtype, format);
         else
-            mf_media_type_to_wg_format_video(type, &subtype, format);
+            mf_media_type_to_winedmo_format_video(type, &subtype, format);
     }
     else
         FIXME("Unrecognized major type %s.\n", debugstr_guid(&major_type));

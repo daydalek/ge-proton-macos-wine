@@ -36,6 +36,33 @@ WINE_DEFAULT_DEBUG_CHANNEL(mfplat);
 
 extern const GUID CLSID_FileSchemePlugin;
 
+const char *debugstr_media_type(IMFMediaType *media_type)
+{
+    UINT channels, sps;
+    GUID subtype = {0};
+    UINT64 frame_size;
+
+    if (!media_type)
+        return "{null}";
+
+    IMFMediaType_GetGUID(media_type, &MF_MT_SUBTYPE, &subtype);
+
+    if (SUCCEEDED(IMFMediaType_GetUINT64(media_type, &MF_MT_FRAME_SIZE, &frame_size)) && frame_size)
+    {
+        return wine_dbg_sprintf("{%p %s %ux%u}", media_type, debugstr_guid(&subtype), (UINT)(frame_size >> 32), (UINT32)frame_size);
+    }
+    else if (SUCCEEDED(IMFMediaType_GetUINT32(media_type, &MF_MT_AUDIO_NUM_CHANNELS, &channels)) && channels)
+    {
+        if (SUCCEEDED(IMFMediaType_GetUINT32(media_type, &MF_MT_AUDIO_SAMPLES_PER_SECOND, &sps)))
+            return wine_dbg_sprintf("{%p %s %u-ch %u}", media_type, debugstr_guid(&subtype), channels, sps);
+        return wine_dbg_sprintf("{%p %s %u-ch}", media_type, debugstr_guid(&subtype), channels);
+    }
+    else
+    {
+        return wine_dbg_sprintf("{%p %s ?}", media_type, debugstr_guid(&subtype));
+    }
+}
+
 struct activate_object
 {
     IMFActivate IMFActivate_iface;

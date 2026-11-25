@@ -43,6 +43,7 @@
 #include "strsafe.h"
 #undef INITGUID
 #include "evr.h"
+#include "wine/mfinternal.h"
 /* mfd3d12 guids are not included in mfuuid */
 #define INITGUID
 #undef EXTERN_GUID
@@ -54,6 +55,107 @@
 #include "pathcch.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(mfplat);
+
+struct bytestream_read_cb
+{
+    IMFAsyncCallback IMFAsyncCallback_iface;
+    LONG refcount;
+    HANDLE event;
+    IMFAsyncResult *result;
+};
+
+static struct bytestream_read_cb *bytestream_read_cb_from_iface(IMFAsyncCallback *iface)
+{
+    return CONTAINING_RECORD(iface, struct bytestream_read_cb, IMFAsyncCallback_iface);
+}
+
+static HRESULT WINAPI bytestream_read_cb_QueryInterface(IMFAsyncCallback *iface, REFIID riid, void **obj)
+{
+    if (IsEqualIID(riid, &IID_IMFAsyncCallback) || IsEqualIID(riid, &IID_IUnknown))
+    {
+        *obj = iface;
+        IMFAsyncCallback_AddRef(iface);
+        return S_OK;
+    }
+    *obj = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI bytestream_read_cb_AddRef(IMFAsyncCallback *iface)
+{
+    return InterlockedIncrement(&bytestream_read_cb_from_iface(iface)->refcount);
+}
+
+static ULONG WINAPI bytestream_read_cb_Release(IMFAsyncCallback *iface)
+{
+    struct bytestream_read_cb *cb = bytestream_read_cb_from_iface(iface);
+    ULONG ref = InterlockedDecrement(&cb->refcount);
+    if (!ref) { CloseHandle(cb->event); free(cb); }
+    return ref;
+}
+
+static HRESULT WINAPI bytestream_read_cb_GetParameters(IMFAsyncCallback *iface, DWORD *flags, DWORD *queue)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI bytestream_read_cb_Invoke(IMFAsyncCallback *iface, IMFAsyncResult *result)
+{
+    struct bytestream_read_cb *cb = bytestream_read_cb_from_iface(iface);
+    cb->result = result;
+    IMFAsyncResult_AddRef(result);
+    SetEvent(cb->event);
+    return S_OK;
+}
+
+static const IMFAsyncCallbackVtbl bytestream_read_cb_vtbl =
+{
+    bytestream_read_cb_QueryInterface,
+    bytestream_read_cb_AddRef,
+    bytestream_read_cb_Release,
+    bytestream_read_cb_GetParameters,
+    bytestream_read_cb_Invoke,
+};
+
+/* Some IMFByteStream implementations only support asynchronous reads and signal
+ * this by returning pcbRead == 0xffffffff from the synchronous Read method.
+ * Fall back to BeginRead/EndRead in that case. */
+static HRESULT mfplat_bytestream_read(IMFByteStream *stream, BYTE *buffer, ULONG size, ULONG *read_size)
+{
+    struct bytestream_read_cb *cb;
+    IMFAsyncResult *result;
+    HRESULT hr;
+
+    if (FAILED(hr = IMFByteStream_Read(stream, buffer, size, read_size)))
+        return hr;
+    if (*read_size != 0xffffffff)
+        return S_OK;
+
+    if (!(cb = calloc(1, sizeof(*cb))))
+        return E_OUTOFMEMORY;
+    cb->IMFAsyncCallback_iface.lpVtbl = &bytestream_read_cb_vtbl;
+    cb->refcount = 1;
+    cb->event = CreateEventA(NULL, FALSE, FALSE, NULL);
+
+    if (FAILED(hr = IMFByteStream_BeginRead(stream, buffer, size, &cb->IMFAsyncCallback_iface, NULL)))
+    {
+        WARN("BeginRead failed, hr %#lx.\n", hr);
+        IMFAsyncCallback_Release(&cb->IMFAsyncCallback_iface);
+        return hr;
+    }
+    if (WaitForSingleObject(cb->event, 5000) != WAIT_OBJECT_0)
+    {
+        ERR("Timed out waiting for BeginRead.\n");
+        IMFAsyncCallback_Release(&cb->IMFAsyncCallback_iface);
+        return E_FAIL;
+    }
+    result = cb->result;
+    cb->result = NULL;
+    IMFAsyncCallback_Release(&cb->IMFAsyncCallback_iface);
+    hr = IMFByteStream_EndRead(stream, result, read_size);
+    IMFAsyncResult_Release(result);
+    return hr;
+}
 
 struct local_handler
 {
@@ -6141,10 +6243,26 @@ static HRESULT resolver_create_registered_handler(HKEY hkey, REFIID riid, void *
     return hr;
 }
 
+static BOOL is_asf_extension_or_mime(const WCHAR *mime, const WCHAR *extension)
+{
+    static const WCHAR *asf_extensions[] = { L".asf", L".wma", L".wmv" };
+    static const WCHAR *asf_mimes[] = { L"video/x-ms-asf", L"audio/x-ms-wma", L"video/x-ms-wmv" };
+    unsigned int i;
+
+    if (extension)
+        for (i = 0; i < ARRAY_SIZE(asf_extensions); ++i)
+            if (!lstrcmpiW(extension, asf_extensions[i])) return TRUE;
+    if (mime)
+        for (i = 0; i < ARRAY_SIZE(asf_mimes); ++i)
+            if (!lstrcmpiW(mime, asf_mimes[i])) return TRUE;
+    return FALSE;
+}
+
 static HRESULT resolver_create_bytestream_handler(IMFByteStream *stream, DWORD flags, const WCHAR *mime,
         const WCHAR *extension, IMFByteStreamHandler **handler)
 {
     static const HKEY hkey_roots[2] = { HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE };
+    static const GUID CLSID_WineDMOByteStreamHandler = {0x317df618,0x5e5a,0x468a,{0x9f,0x15,0xd8,0x27,0xa9,0xa0,0x81,0x62}};
     HRESULT hr = E_FAIL;
     unsigned int i, j;
 
@@ -6202,11 +6320,18 @@ static HRESULT resolver_create_bytestream_handler(IMFByteStream *stream, DWORD f
             break;
     }
 
+    /* Built-in fallback: if no registered ASF/WMA handler was found, try the winedmo handler directly.
+     * This avoids a dependency on the Windows registry having the handler entry populated. */
+    if (FAILED(hr) && is_asf_extension_or_mime(mime, extension))
+        hr = CoCreateInstance(&CLSID_WineDMOByteStreamHandler, NULL, CLSCTX_INPROC_SERVER,
+                &IID_IMFByteStreamHandler, (void **)handler);
+
     return hr;
 }
 
 static HRESULT resolver_get_bytestream_url_hint(IMFByteStream *stream, WCHAR const **url)
 {
+    static const char hunex_magic[] = "HUNEXGGEFA10";
     static const unsigned char asfmagic[]     = {0x30,0x26,0xb2,0x75,0x8e,0x66,0xcf,0x11,0xa6,0xd9,0x00,0xaa,0x00,0x62,0xce,0x6c};
     static const unsigned char wavmagic[]     = { 'R', 'I', 'F', 'F',0x00,0x00,0x00,0x00, 'W', 'A', 'V', 'E', 'f', 'm', 't', ' '};
     static const unsigned char wavmask[]      = {0xff,0xff,0xff,0xff,0x00,0x00,0x00,0x00,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff};
@@ -6237,9 +6362,12 @@ static HRESULT resolver_get_bytestream_url_hint(IMFByteStream *stream, WCHAR con
         { idv2_3_magic, L".mp3", idv2_3_mask },
     };
     unsigned char buffer[4 * sizeof(unsigned int)], pattern[4 * sizeof(unsigned int)];
+    unsigned char hunex_entry[0x80];
     IMFAttributes *attributes;
     DWORD length = 0, caps = 0;
-    unsigned int i, j;
+    QWORD probe_positions[2];
+    QWORD restore_position;
+    unsigned int i, j, k, probe_count;
     QWORD position;
     HRESULT hr;
 
@@ -6263,32 +6391,80 @@ static HRESULT resolver_get_bytestream_url_hint(IMFByteStream *stream, WCHAR con
 
     if (FAILED(hr = IMFByteStream_GetCurrentPosition(stream, &position)))
         return hr;
-    if (position && FAILED(hr = IMFByteStream_SetCurrentPosition(stream, 0)))
-        return hr;
-    if (FAILED(hr = IMFByteStream_Read(stream, buffer, sizeof(buffer), &length)))
-        return hr;
 
-    if (length < sizeof(buffer))
-        return S_OK;
+    restore_position = position;
+    probe_positions[0] = position;
+    probe_count = 1;
+    if (position)
+        probe_positions[probe_count++] = 0;
 
-    for (i = 0; i < ARRAY_SIZE(url_hints); ++i)
+    for (k = 0; k < probe_count && !*url; ++k)
     {
-        memcpy(pattern, buffer, sizeof(buffer));
-        if (url_hints[i].mask)
+        QWORD media_position = probe_positions[k];
+
+        length = 0;
+        if (probe_positions[k] != position && FAILED(hr = IMFByteStream_SetCurrentPosition(stream, probe_positions[k])))
+            goto done;
+        if (FAILED(hr = mfplat_bytestream_read(stream, buffer, sizeof(buffer), &length)))
+            goto done;
+
+        if (length == sizeof(buffer) && !memcmp(buffer, hunex_magic, sizeof(hunex_magic) - 1))
         {
-            unsigned int *mask = (unsigned int *)url_hints[i].mask;
-            unsigned int *data = (unsigned int *)pattern;
+            DWORD file_count = buffer[12] | (buffer[13] << 8) | (buffer[14] << 16) | (buffer[15] << 24);
+            QWORD payload_position;
 
-            for (j = 0; j < sizeof(buffer) / sizeof(unsigned int); ++j)
-                data[j] &= mask[j];
+            if (!file_count || file_count > 0x100000)
+                continue;
 
+            if (FAILED(hr = IMFByteStream_SetCurrentPosition(stream, probe_positions[k] + sizeof(buffer))))
+                goto done;
+            if (FAILED(hr = mfplat_bytestream_read(stream, hunex_entry, sizeof(hunex_entry), &length)))
+                goto done;
+            if (length < sizeof(hunex_entry))
+                continue;
+
+            payload_position = probe_positions[k] + sizeof(buffer) + file_count * sizeof(hunex_entry);
+            if (FAILED(hr = IMFByteStream_SetCurrentPosition(stream, payload_position)))
+                goto done;
+            if (FAILED(hr = mfplat_bytestream_read(stream, buffer, sizeof(buffer), &length)))
+                goto done;
+
+            if (length == sizeof(buffer))
+                media_position = payload_position;
         }
-        if (!memcmp(pattern, url_hints[i].magic, sizeof(pattern)))
+
+        if (length < sizeof(buffer))
+            continue;
+
+        for (i = 0; i < ARRAY_SIZE(url_hints); ++i)
         {
-            *url = url_hints[i].url;
-            break;
+            memcpy(pattern, buffer, sizeof(buffer));
+            if (url_hints[i].mask)
+            {
+                unsigned int *mask = (unsigned int *)url_hints[i].mask;
+                unsigned int *data = (unsigned int *)pattern;
+
+                for (j = 0; j < sizeof(buffer) / sizeof(unsigned int); ++j)
+                    data[j] &= mask[j];
+
+            }
+            if (!memcmp(pattern, url_hints[i].magic, sizeof(pattern)))
+            {
+                *url = url_hints[i].url;
+                restore_position = media_position;
+                if (media_position != position)
+                    TRACE("Found media stream inside HUNEX archive entry %s at offset %s.\n",
+                            debugstr_a((const char *)hunex_entry), wine_dbgstr_longlong(media_position));
+                break;
+            }
         }
     }
+
+done:
+    if (FAILED(IMFByteStream_SetCurrentPosition(stream, restore_position)) && SUCCEEDED(hr))
+        hr = E_FAIL;
+    if (FAILED(hr))
+        return hr;
 
     if (*url)
         TRACE("Content type guessed as %s from %s.\n", debugstr_w(*url), debugstr_an((char *)buffer, length));
@@ -6298,10 +6474,9 @@ static HRESULT resolver_get_bytestream_url_hint(IMFByteStream *stream, WCHAR con
     return S_OK;
 }
 
-static HRESULT resolver_create_gstreamer_handler(IMFByteStreamHandler **handler)
+static HRESULT resolver_create_default_handler(IMFByteStreamHandler **handler)
 {
-    static const GUID CLSID_GStreamerByteStreamHandler = {0x317df618, 0x5e5a, 0x468a, {0x9f, 0x15, 0xd8, 0x27, 0xa9, 0xa0, 0x81, 0x62}};
-    return CoCreateInstance(&CLSID_GStreamerByteStreamHandler, NULL, CLSCTX_INPROC_SERVER, &IID_IMFByteStreamHandler, (void **)handler);
+    return CoCreateInstance(&CLSID_MPEG4ByteStreamHandlerPlugin, NULL, CLSCTX_INPROC_SERVER, &IID_IMFByteStreamHandler, (void **)handler);
 }
 
 static HRESULT resolver_get_bytestream_handler(IMFByteStream *stream, const WCHAR *url, DWORD flags,
@@ -6337,12 +6512,28 @@ static HRESULT resolver_get_bytestream_handler(IMFByteStream *stream, const WCHA
        this handler for all possible types.
      */
 
+    TRACE( "url_ext %s mimeW %s\n", debugstr_w(url_ext), debugstr_w(mimeW) );
     if (url_ext || mimeW)
     {
         hr = resolver_create_bytestream_handler(stream, flags, mimeW, url_ext, handler);
 
         if (FAILED(hr))
-            hr = resolver_create_gstreamer_handler(handler);
+        {
+            const WCHAR *guessed_ext;
+
+            if (SUCCEEDED(resolver_get_bytestream_url_hint(stream, &guessed_ext)) && guessed_ext)
+                hr = resolver_create_bytestream_handler(stream, flags, NULL, guessed_ext, handler);
+        }
+
+        if (FAILED(hr))
+            hr = resolver_create_default_handler(handler);
+    }
+    else if (SUCCEEDED(resolver_get_bytestream_url_hint(stream, &url_ext)) && url_ext)
+    {
+        hr = resolver_create_bytestream_handler(stream, flags, NULL, url_ext, handler);
+
+        if (FAILED(hr))
+            hr = resolver_create_default_handler(handler);
     }
 
     CoTaskMemFree(mimeW);
@@ -6351,7 +6542,7 @@ static HRESULT resolver_get_bytestream_handler(IMFByteStream *stream, const WCHA
     if (SUCCEEDED(hr))
         return hr;
 
-    if (!(flags & MF_RESOLUTION_CONTENT_DOES_NOT_HAVE_TO_MATCH_EXTENSION_OR_MIME_TYPE))
+    if (url_ext && !(flags & MF_RESOLUTION_CONTENT_DOES_NOT_HAVE_TO_MATCH_EXTENSION_OR_MIME_TYPE))
         return MF_E_UNSUPPORTED_BYTESTREAM_TYPE;
 
     if (FAILED(hr = resolver_get_bytestream_url_hint(stream, &url_ext)))
@@ -6360,7 +6551,7 @@ static HRESULT resolver_get_bytestream_handler(IMFByteStream *stream, const WCHA
     hr = resolver_create_bytestream_handler(stream, flags, NULL, url_ext, handler);
 
     if (FAILED(hr))
-        hr = resolver_create_gstreamer_handler(handler);
+        hr = resolver_create_default_handler(handler);
 
     return hr;
 }
@@ -6421,13 +6612,20 @@ static HRESULT resolver_create_scheme_handler(const WCHAR *scheme, DWORD flags, 
     return hr;
 }
 
-static HRESULT resolver_get_scheme_handler(const WCHAR *url, DWORD flags, IMFSchemeHandler **handler)
+/* Also in kernelbase */
+static BOOL is_escaped_drive_spec(const WCHAR *str)
 {
-    static const WCHAR fileschemeW[] = L"file:";
+    return isalpha(str[0]) && (str[1] == ':' || str[1] == '|');
+}
+
+static BOOL resolver_find_scheme(const WCHAR *url, unsigned int *len)
+{
     const WCHAR *ptr = url;
-    unsigned int len;
-    WCHAR *scheme;
-    HRESULT hr;
+
+    *len = 0;
+
+    if (is_escaped_drive_spec(url))
+        return FALSE;
 
     /* RFC 3986: scheme = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) */
     while (*ptr)
@@ -6449,14 +6647,22 @@ static HRESULT resolver_get_scheme_handler(const WCHAR *url, DWORD flags, IMFSch
         ptr++;
     }
 
-    /* Schemes must end with a ':', if not found try "file:" */
+    /* Schemes must end with a ':' */
     if (ptr == url || *ptr != ':')
-    {
-        url = fileschemeW;
-        len = ARRAY_SIZE(fileschemeW) - 1;
-    }
-    else
-        len = ptr - url + 1;
+        return FALSE;
+
+    *len = ptr - url + 1;
+    return TRUE;
+}
+
+static HRESULT resolver_get_scheme_handler(const WCHAR *url, DWORD flags, IMFSchemeHandler **handler)
+{
+    unsigned int len;
+    WCHAR *scheme;
+    HRESULT hr;
+
+    if (!resolver_find_scheme(url, &len))
+        return MF_E_UNSUPPORTED_SCHEME;
 
     scheme = malloc((len + 1) * sizeof(WCHAR));
     if (!scheme)
@@ -6466,8 +6672,6 @@ static HRESULT resolver_get_scheme_handler(const WCHAR *url, DWORD flags, IMFSch
     scheme[len] = 0;
 
     hr = resolver_create_scheme_handler(scheme, flags, handler);
-    if (FAILED(hr) && url != fileschemeW)
-        hr = resolver_create_scheme_handler(fileschemeW, flags, handler);
 
     free(scheme);
 
@@ -6571,10 +6775,49 @@ static ULONG WINAPI source_resolver_Release(IMFSourceResolver *iface)
     return refcount;
 }
 
+static WCHAR *resolver_normalise_url(const WCHAR *url)
+{
+    static const WCHAR filescheme[] = L"file:", filescheme_dblslash[] = L"file://";
+    unsigned int len = 0, slash_count;
+    WCHAR *normalised_url;
+    const WCHAR *scheme;
+
+    if (resolver_find_scheme(url, &len))
+        return wcsdup(url);
+
+    /* If not found try "file:"
+     * Native allows leading slashes in file paths. If "file:" is missing, native prepends
+     * it before calling BeginCreateObject(), and includes two or three slashes if any were
+     * present. The rules don't seem to follow much of a pattern, and may have been designed
+     * to get the desired result from PathCreateFromUrlW(). */
+    while (url[len] == L'/')
+        ++len;
+    if (!len)
+        slash_count = 0;
+    else if (is_escaped_drive_spec(&url[len]))
+        slash_count = 1 - (len == 5 || len == 6);
+    else if (len < 5)
+        slash_count = len & 1;
+    else
+        slash_count = len > 6;
+    url += len - slash_count;
+
+    scheme = len ? filescheme_dblslash : filescheme;
+    len = wcslen(url);
+    if (!(normalised_url = malloc((wcslen(scheme) + len + 1) * sizeof(WCHAR))))
+        return NULL;
+
+    wcscpy(normalised_url, scheme);
+    wcscat(normalised_url, url);
+
+    return normalised_url;
+}
+
 static HRESULT WINAPI source_resolver_CreateObjectFromURL(IMFSourceResolver *iface, const WCHAR *url,
         DWORD flags, IPropertyStore *props, MF_OBJECT_TYPE *obj_type, IUnknown **object)
 {
     struct source_resolver *resolver = impl_from_IMFSourceResolver(iface);
+    WCHAR *normalised_url = NULL;
     IMFSchemeHandler *handler;
     IRtwqAsyncResult *result;
     RTWQASYNCRESULT *data;
@@ -6585,23 +6828,26 @@ static HRESULT WINAPI source_resolver_CreateObjectFromURL(IMFSourceResolver *ifa
     if (!url || !obj_type || !object)
         return E_POINTER;
 
-    if (FAILED(hr = resolver_get_scheme_handler(url, flags, &handler)))
-        return hr;
+    if (!(normalised_url = resolver_normalise_url(url)))
+        return E_OUTOFMEMORY;
+
+    if (FAILED(hr = resolver_get_scheme_handler(normalised_url, flags, &handler)))
+        goto done;
 
     hr = RtwqCreateAsyncResult((IUnknown *)handler, NULL, NULL, &result);
     IMFSchemeHandler_Release(handler);
     if (FAILED(hr))
-        return hr;
+        goto done;
 
     data = (RTWQASYNCRESULT *)result;
     data->hEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
 
-    hr = IMFSchemeHandler_BeginCreateObject(handler, url, flags, props, NULL, (IMFAsyncCallback *)&resolver->url_callback,
+    hr = IMFSchemeHandler_BeginCreateObject(handler, normalised_url, flags, props, NULL, (IMFAsyncCallback *)&resolver->url_callback,
             (IUnknown *)result);
     if (FAILED(hr))
     {
         IRtwqAsyncResult_Release(result);
-        return hr;
+        goto done;
     }
 
     WaitForSingleObject(data->hEvent, INFINITE);
@@ -6609,6 +6855,8 @@ static HRESULT WINAPI source_resolver_CreateObjectFromURL(IMFSourceResolver *ifa
     hr = resolver_end_create_object(resolver, OBJECT_FROM_URL, result, obj_type, object);
     IRtwqAsyncResult_Release(result);
 
+done:
+    free(normalised_url);
     return hr;
 }
 
@@ -6660,12 +6908,16 @@ static HRESULT WINAPI source_resolver_BeginCreateObjectFromURL(IMFSourceResolver
     IMFSchemeHandler *handler;
     IUnknown *inner_cookie = NULL;
     IRtwqAsyncResult *result;
+    WCHAR *normalised_url;
     HRESULT hr;
 
     TRACE("%p, %s, %#lx, %p, %p, %p, %p.\n", iface, debugstr_w(url), flags, props, cancel_cookie, callback, state);
 
-    if (FAILED(hr = resolver_get_scheme_handler(url, flags, &handler)))
-        return hr;
+    if (!(normalised_url = resolver_normalise_url(url)))
+        return E_OUTOFMEMORY;
+
+    if (FAILED(hr = resolver_get_scheme_handler(normalised_url, flags, &handler)))
+        goto done;
 
     if (cancel_cookie)
         *cancel_cookie = NULL;
@@ -6673,9 +6925,9 @@ static HRESULT WINAPI source_resolver_BeginCreateObjectFromURL(IMFSourceResolver
     hr = RtwqCreateAsyncResult((IUnknown *)handler, (IRtwqAsyncCallback *)callback, state, &result);
     IMFSchemeHandler_Release(handler);
     if (FAILED(hr))
-        return hr;
+        goto done;
 
-    hr = IMFSchemeHandler_BeginCreateObject(handler, url, flags, props, cancel_cookie ? &inner_cookie : NULL,
+    hr = IMFSchemeHandler_BeginCreateObject(handler, normalised_url, flags, props, cancel_cookie ? &inner_cookie : NULL,
             (IMFAsyncCallback *)&resolver->url_callback, (IUnknown *)result);
 
     if (SUCCEEDED(hr) && inner_cookie)
@@ -6686,6 +6938,8 @@ static HRESULT WINAPI source_resolver_BeginCreateObjectFromURL(IMFSourceResolver
 
     IRtwqAsyncResult_Release(result);
 
+done:
+    free(normalised_url);
     return hr;
 }
 
@@ -7418,11 +7672,19 @@ static HRESULT WINAPI eventqueue_GetEvent(IMFMediaEventQueue *iface, DWORD flags
 
 static void queue_notify_subscriber(struct event_queue *queue)
 {
+    DWORD flags, callback_queue = MFASYNC_CALLBACK_QUEUE_STANDARD;
+    RTWQASYNCRESULT *result_data;
+
     if (list_empty(&queue->events) || !queue->subscriber || queue->notified)
         return;
 
+    result_data = (RTWQASYNCRESULT *)queue->subscriber;
+    if (FAILED(IRtwqAsyncCallback_GetParameters(result_data->pCallback, &flags, &callback_queue))
+            || callback_queue == MFASYNC_CALLBACK_QUEUE_UNDEFINED)
+        callback_queue = MFASYNC_CALLBACK_QUEUE_STANDARD;
+
     queue->notified = TRUE;
-    RtwqPutWorkItem(MFASYNC_CALLBACK_QUEUE_STANDARD, 0, queue->subscriber);
+    RtwqPutWorkItem(callback_queue, 0, queue->subscriber);
 }
 
 static HRESULT WINAPI eventqueue_BeginGetEvent(IMFMediaEventQueue *iface, IMFAsyncCallback *callback, IUnknown *state)
@@ -9222,8 +9484,15 @@ static const IMFDXGIDeviceManagerVtbl dxgi_device_manager_vtbl =
 HRESULT WINAPI MFCreateDXGIDeviceManager(UINT *token, IMFDXGIDeviceManager **manager)
 {
     struct dxgi_device_manager *object;
+    const char *do_not_create = getenv("WINE_DO_NOT_CREATE_DXGI_DEVICE_MANAGER");
 
     TRACE("%p, %p.\n", token, manager);
+
+    if (do_not_create && do_not_create[0] != '\0')
+    {
+        FIXME("stubbing out\n");
+        return E_NOTIMPL;
+    }
 
     if (!token || !manager)
         return E_POINTER;

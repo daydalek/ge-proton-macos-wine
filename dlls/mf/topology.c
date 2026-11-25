@@ -1783,6 +1783,20 @@ static HRESULT create_topology_node(MF_TOPOLOGY_TYPE node_type, struct topology_
     return S_OK;
 }
 
+MF_TOPOLOGY_TYPE topology_node_get_type(IMFTopologyNode *node)
+{
+    MF_TOPOLOGY_TYPE type;
+    HRESULT hr;
+
+    if (FAILED(hr = IMFTopologyNode_GetNodeType(node, &type)))
+    {
+        ERR("Failed to get node type, hr %#lx.\n", hr);
+        return -1;
+    }
+
+    return type;
+}
+
 HRESULT topology_node_get_object(IMFTopologyNode *node, REFIID riid, void **obj)
 {
     IUnknown *unk;

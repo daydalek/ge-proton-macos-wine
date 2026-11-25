@@ -5609,7 +5609,7 @@ failed:
     CoUninitialize();
 }
 
-static void test_h264_decoder_alignment(void)
+static void test_h264_decoder_alignment(BOOL input_frame_size)
 {
     static const DWORD actual_width = 82, actual_height = 84;
     static const DWORD aligned_width = 96, aligned_height = 96;
@@ -5625,16 +5625,17 @@ static void test_h264_decoder_alignment(void)
     IMFSample *input_sample, *output_sample;
     const BYTE *h264_encoded_data;
     ULONG h264_encoded_data_len;
-    IMFMediaType *output_type;
+    IMFMediaType *input_type, *output_type;
     IMFTransform *transform;
-    DWORD output_status;
+    DWORD output_status, length, output_count = 0;
+    MFVideoArea aperture;
     UINT64 frame_size;
     HRESULT hr;
 
     hr = CoInitialize(NULL);
     ok(hr == S_OK, "Failed to initialize, hr %#lx.\n", hr);
 
-    winetest_push_context("h264dec alignment");
+    winetest_push_context("h264dec alignment, input frame size %u", input_frame_size);
 
     if (FAILED(hr = CoCreateInstance(&CLSID_MSH264DecoderMFT, NULL, CLSCTX_INPROC_SERVER,
             &IID_IMFTransform, (void **)&transform)))
@@ -5642,12 +5643,18 @@ static void test_h264_decoder_alignment(void)
 
     load_resource(L"h264data.bin", &h264_encoded_data, &h264_encoded_data_len);
 
-    check_mft_set_input_type(transform, input_type_desc, S_OK);
+    hr = MFCreateMediaType(&input_type);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    init_media_type(input_type, input_type_desc, input_frame_size ? 3 : 2);
+    hr = IMFTransform_SetInputType(transform, 0, input_type, 0);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    IMFMediaType_Release(input_type);
 
     output_type = transform_find_available_output_type(transform, &MFVideoFormat_NV12);
     hr = IMFMediaType_GetUINT64(output_type, &MF_MT_FRAME_SIZE, &frame_size);
     ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
-    ok(frame_size == (((UINT64)actual_width << 32) | actual_height), "Unexpected frame size %#llx\n", frame_size);
+    ok(frame_size == (input_frame_size ? (((UINT64)actual_width << 32) | actual_height)
+            : (((UINT64)1920 << 32) | 1080)), "Unexpected frame size %#llx\n", frame_size);
 
     hr = IMFTransform_SetOutputType(transform, 0, output_type, 0);
     ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
@@ -5669,6 +5676,10 @@ static void test_h264_decoder_alignment(void)
         if (hr == S_OK)
         {
             ok(!!output_type, "Stream change not received.\n");
+            hr = IMFSample_GetTotalLength(output_sample, &length);
+            ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+            ok(length == aligned_width * aligned_height * 3 / 2, "Unexpected sample length %lu.\n", length);
+            ++output_count;
             IMFSample_Release(output_sample);
             output_sample = create_sample(NULL, aligned_width * aligned_height * 3 / 2);
         }
@@ -5687,12 +5698,20 @@ static void test_h264_decoder_alignment(void)
             ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
             ok(frame_size == (((UINT64)aligned_width << 32) | aligned_height), "Unexpected frame size %#llx\n", frame_size);
 
+            hr = IMFMediaType_GetBlob(output_type, &MF_MT_MINIMUM_DISPLAY_APERTURE,
+                    (BYTE *)&aperture, sizeof(aperture), NULL);
+            ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+            if (SUCCEEDED(hr))
+                ok(aperture.Area.cx == actual_width && aperture.Area.cy == actual_height,
+                        "Unexpected display aperture %ldx%ld.\n", aperture.Area.cx, aperture.Area.cy);
+
             hr = IMFTransform_SetOutputType(transform, 0, output_type, 0);
             ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
             IMFMediaType_Release(output_type);
         }
     } while (hr == S_OK);
 
+    ok(output_count, "No decoded frames.\n");
     IMFSample_Release(output_sample);
     IMFTransform_Release(transform);
 
@@ -11356,7 +11375,8 @@ START_TEST(transform)
     test_h264_encoder();
     test_h264_decoder();
     test_h264_decoder_timestamps();
-    test_h264_decoder_alignment();
+    test_h264_decoder_alignment(FALSE);
+    test_h264_decoder_alignment(TRUE);
     test_wmv_encoder();
     test_wmv_decoder();
     test_wmv_decoder_timestamps();

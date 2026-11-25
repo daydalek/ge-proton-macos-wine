@@ -127,3 +127,7 @@ extern HRESULT topology_node_set_device_manager(IMFTopologyNode *node, IUnknown 
 extern HRESULT stream_sink_get_device_manager(IMFStreamSink *stream_sink, IUnknown **device_manager);
 
 extern HRESULT enum_audio_capture_sources(IMFAttributes *attributes, IMFActivate ***sources, UINT32 *ret_count);
+
+extern const char *debugstr_media_type(IMFMediaType *media_type);
+extern MF_TOPOLOGY_TYPE topology_node_get_type(IMFTopologyNode *node);
+extern IMFAttributes *topology_node_transform_async_get_attributes(IMFTopologyNode *node);

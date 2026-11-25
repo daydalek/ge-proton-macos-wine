@@ -386,6 +386,8 @@ HRESULT WINAPI BaseControlWindowImpl_put_Left(IVideoWindow *iface, LONG left)
     TRACE("window %p, left %ld.\n", window, left);
 
     GetWindowRect(window->hwnd, &rect);
+    if (GetWindowLongPtrW(window->hwnd, GWL_STYLE) & WS_CHILD)
+        MapWindowPoints(NULL, GetParent(window->hwnd), (POINT *)&rect, 2);
     if (!SetWindowPos(window->hwnd, NULL, left, rect.top, 0, 0,
             SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSIZE))
         return E_FAIL;
@@ -440,6 +442,8 @@ HRESULT WINAPI BaseControlWindowImpl_put_Top(IVideoWindow *iface, LONG top)
     TRACE("window %p, top %ld.\n", window, top);
 
     GetWindowRect(window->hwnd, &rect);
+    if (GetWindowLongPtrW(window->hwnd, GWL_STYLE) & WS_CHILD)
+        MapWindowPoints(NULL, GetParent(window->hwnd), (POINT *)&rect, 2);
     if (!SetWindowPos(window->hwnd, NULL, rect.left, top, 0, 0,
             SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSIZE))
         return E_FAIL;

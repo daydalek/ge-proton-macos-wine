@@ -178,6 +178,7 @@ struct async_start_params
     IMFPresentationDescriptor *descriptor;
     GUID format;
     PROPVARIANT position;
+    UINT64 generation;
 };
 
 static void async_start_params_destroy(struct async_start_params *params)
@@ -190,7 +191,7 @@ static void async_start_params_destroy(struct async_start_params *params)
 DEFINE_MF_ASYNC_PARAMS(async_start_params);
 
 static HRESULT async_start_params_create(IMFPresentationDescriptor *descriptor, const GUID *time_format,
-        const PROPVARIANT *position, IUnknown **out)
+        const PROPVARIANT *position, UINT64 generation, IUnknown **out)
 {
     struct async_start_params *params;
 
@@ -199,6 +200,32 @@ static HRESULT async_start_params_create(IMFPresentationDescriptor *descriptor, 
     IMFPresentationDescriptor_AddRef(descriptor);
     params->format = *time_format;
     PropVariantCopy(&params->position, position);
+    params->generation = generation;
+
+    *out = &params->IUnknown_iface;
+    return S_OK;
+}
+
+struct async_read_params
+{
+    IUnknown IUnknown_iface;
+    LONG refcount;
+    UINT64 generation;
+};
+
+static void async_read_params_destroy(struct async_read_params *params)
+{
+    free(params);
+}
+
+DEFINE_MF_ASYNC_PARAMS(async_read_params);
+
+static HRESULT async_read_params_create(UINT64 generation, IUnknown **out)
+{
+    struct async_read_params *params;
+
+    if (!(params = async_read_params_alloc())) return E_OUTOFMEMORY;
+    params->generation = generation;
 
     *out = &params->IUnknown_iface;
     return S_OK;
@@ -219,6 +246,22 @@ static void async_set_rate_params_destroy(struct async_set_rate_params *params)
 
 DEFINE_MF_ASYNC_PARAMS(async_set_rate_params);
 
+struct async_request_params
+{
+    IUnknown IUnknown_iface;
+    LONG refcount;
+    IUnknown *token;
+    UINT64 generation;
+};
+
+static void async_request_params_destroy(struct async_request_params *params)
+{
+    if (params->token) IUnknown_Release(params->token);
+    free(params);
+}
+
+DEFINE_MF_ASYNC_PARAMS(async_request_params);
+
 static HRESULT async_set_rate_params_create(float rate, BOOL thin, IUnknown **out)
 {
     struct async_set_rate_params *params;
@@ -226,6 +269,18 @@ static HRESULT async_set_rate_params_create(float rate, BOOL thin, IUnknown **ou
     if (!(params = async_set_rate_params_alloc())) return E_OUTOFMEMORY;
     params->rate = rate;
     params->thin = thin;
+
+    *out = &params->IUnknown_iface;
+    return S_OK;
+}
+
+static HRESULT async_request_params_create(IUnknown *token, UINT64 generation, IUnknown **out)
+{
+    struct async_request_params *params;
+
+    if (!(params = async_request_params_alloc())) return E_OUTOFMEMORY;
+    if ((params->token = token)) IUnknown_AddRef(params->token);
+    params->generation = generation;
 
     *out = &params->IUnknown_iface;
     return S_OK;
@@ -274,9 +329,11 @@ struct media_source
     struct winedmo_demuxer winedmo_demuxer;
     struct winedmo_stream winedmo_stream;
     UINT64 file_size;
+    UINT64 position;
     INT64 duration;
     UINT stream_count;
     WCHAR mime_type[256];
+    UINT64 generation;
 
     UINT *stream_map;
     struct media_stream **streams;
@@ -288,6 +345,8 @@ struct media_source
         SOURCE_RUNNING,
         SOURCE_SHUTDOWN,
     } state;
+    BOOL eop_queued;
+    BOOL demux_eos;
     UINT pending_reads;
 };
 
@@ -389,11 +448,21 @@ static void queue_media_event_object(IMFMediaEventQueue *queue, MediaEventType t
 
 static void queue_media_source_read(struct media_source *source)
 {
+    IUnknown *op;
     HRESULT hr;
 
-    if (FAILED(hr = MFPutWorkItem(MFASYNC_CALLBACK_QUEUE_STANDARD, &source->async_read_iface, NULL)))
+    if (FAILED(hr = async_read_params_create(source->generation, &op)))
+    {
+        ERR("Failed to allocate async read params for source %p, hr %#lx\n", source, hr);
+        return;
+    }
+
+    if (FAILED(hr = MFPutWorkItem(MFASYNC_CALLBACK_QUEUE_IO, &source->async_read_iface, op)))
         ERR("Failed to queue async read for source %p, hr %#lx\n", source, hr);
-    source->pending_reads++;
+    else
+        source->pending_reads++;
+
+    IUnknown_Release(op);
 }
 
 static void media_stream_start(struct media_stream *stream, UINT index, const PROPVARIANT *position)
@@ -455,6 +524,11 @@ static HRESULT media_source_start(struct media_source *source, IMFPresentationDe
         position->vt = VT_I8;
         position->hVal.QuadPart = 0;
     }
+    if (starting || position->vt != VT_EMPTY)
+    {
+        source->eop_queued = FALSE;
+        source->demux_eos = FALSE;
+    }
 
     for (i = 0; i < source->stream_count; i++)
     {
@@ -479,25 +553,29 @@ static HRESULT media_source_start(struct media_source *source, IMFPresentationDe
 
         if (FAILED(hr = IMFStreamDescriptor_GetStreamIdentifier(stream_descriptor, &id)))
             WARN("Failed to get stream descriptor id, hr %#lx\n", hr);
-        else if (id > source->stream_count)
-            WARN("Invalid stream descriptor id %lu, hr %#lx\n", id, hr);
+        else if (i >= source->stream_count)
+            WARN("Invalid stream descriptor index %lu, id %lu\n", i, id);
         else
         {
-            struct media_stream *stream = source->streams[id - 1];
+            struct media_stream *stream = source->streams[i];
             stream->active = selected;
         }
 
         IMFStreamDescriptor_Release(stream_descriptor);
     }
 
+    if (position->vt == VT_I8)
+    {
+        WARN("MF media source seek to %s before starting streams.\n", debugstr_time(position->hVal.QuadPart));
+        if ((status = winedmo_demuxer_seek(source->winedmo_demuxer, position->hVal.QuadPart)))
+            WARN("Failed to seek to %I64d, status %#lx\n", position->hVal.QuadPart, status);
+    }
+
     for (i = 0; i < source->stream_count; i++)
     {
         struct media_stream *stream = source->streams[i];
-        media_stream_start(stream, i, position);
+        media_stream_start(stream, source->stream_map[i], position);
     }
-
-    if (position->vt == VT_I8 && (status = winedmo_demuxer_seek(source->winedmo_demuxer, position->hVal.QuadPart)))
-        WARN("Failed to seek to %I64d, status %#lx\n", position->hVal.QuadPart, status);
     source->state = SOURCE_RUNNING;
 
     queue_media_event_value(source->queue, seeking ? MESourceSeeked : MESourceStarted, position);
@@ -515,7 +593,9 @@ static HRESULT media_source_async_start(struct media_source *source, IMFAsyncRes
 
     EnterCriticalSection(&source->cs);
 
-    if (FAILED(hr = media_source_start(source, params->descriptor, &params->format, &params->position)))
+    if (params->generation != source->generation)
+        hr = S_OK;
+    else if (FAILED(hr = media_source_start(source, params->descriptor, &params->format, &params->position)))
         WARN("Failed to start source %p, hr %#lx\n", source, hr);
 
     LeaveCriticalSection(&source->cs);
@@ -666,13 +746,27 @@ static HRESULT demuxer_read_sample(struct winedmo_demuxer demuxer, UINT *index, 
     return hr;
 }
 
+static void media_source_queue_end_of_presentation(struct media_source *source)
+{
+    PROPVARIANT empty = {.vt = VT_EMPTY};
+
+    if (source->eop_queued)
+        return;
+
+    source->eop_queued = TRUE;
+    WARN("Queueing MEEndOfPresentation for source %p.\n", source);
+    queue_media_event_value(source->queue, MEEndOfPresentation, &empty);
+}
+
 static HRESULT media_source_send_eos(struct media_source *source, struct media_stream *stream)
 {
     PROPVARIANT empty = {.vt = VT_EMPTY};
     UINT i;
 
-    if (stream->active && !stream->eos && list_empty(&stream->samples))
+    if (stream->active && !stream->eos)
     {
+        WARN("Queueing MEEndOfStream for stream %p, queued samples %u.\n",
+                stream, list_count(&stream->samples));
         queue_media_event_value(stream->queue, MEEndOfStream, &empty);
         stream->eos = TRUE;
     }
@@ -683,7 +777,7 @@ static HRESULT media_source_send_eos(struct media_source *source, struct media_s
         if (other->active && !other->eos) return S_OK;
     }
 
-    queue_media_event_value(source->queue, MEEndOfPresentation, &empty);
+    media_source_queue_end_of_presentation(source);
     source->state = SOURCE_STOPPED;
     return S_OK;
 }
@@ -705,6 +799,7 @@ static HRESULT media_source_read(struct media_source *source)
 
     if (hr == MF_E_END_OF_STREAM)
     {
+        source->demux_eos = TRUE;
         for (i = 0; i < source->stream_count; i++)
             media_source_send_eos(source, source->streams[i]);
         return S_OK;
@@ -719,12 +814,19 @@ static HRESULT media_source_read(struct media_source *source)
 
 static HRESULT media_source_async_read(struct media_source *source, IMFAsyncResult *result)
 {
+    struct async_read_params *params;
+    IUnknown *state;
     HRESULT hr;
+
+    if (!(state = IMFAsyncResult_GetStateNoAddRef(result))) return E_INVALIDARG;
+    params = async_read_params_from_IUnknown(state);
 
     EnterCriticalSection(&source->cs);
     source->pending_reads--;
 
-    if (FAILED(hr = media_source_read(source)))
+    if (params->generation != source->generation)
+        hr = S_OK;
+    else if (FAILED(hr = media_source_read(source)))
         WARN("Failed to request sample, hr %#lx\n", hr);
 
     LeaveCriticalSection(&source->cs);
@@ -889,6 +991,14 @@ static HRESULT media_source_request_stream_sample(struct media_source *source, s
     {
         media_stream_send_sample(stream, sample, token);
         IMFSample_Release(sample);
+        if (source->demux_eos)
+            media_source_send_eos(source, stream);
+        return S_OK;
+    }
+
+    if (source->demux_eos)
+    {
+        media_source_send_eos(source, stream);
         return S_OK;
     }
 
@@ -900,12 +1010,19 @@ static HRESULT media_source_request_stream_sample(struct media_source *source, s
 static HRESULT media_stream_async_request(struct media_stream *stream, IMFAsyncResult *result)
 {
     struct media_source *source = media_source_from_IMFMediaSource(stream->source);
-    IUnknown *token = IMFAsyncResult_GetStateNoAddRef(result);
+    struct async_request_params *params;
+    IUnknown *state;
     HRESULT hr = S_OK;
 
+    if (!(state = IMFAsyncResult_GetStateNoAddRef(result))) return E_INVALIDARG;
+    params = async_request_params_from_IUnknown(state);
+
     EnterCriticalSection(&source->cs);
-    stream->pending_thin = FALSE;
-    hr = media_source_request_stream_sample(source, stream, token);
+    if (params->generation == source->generation)
+    {
+        stream->pending_thin = FALSE;
+        hr = media_source_request_stream_sample(source, stream, params->token);
+    }
     LeaveCriticalSection(&source->cs);
 
     return hr;
@@ -916,12 +1033,19 @@ DEFINE_MF_ASYNC_CALLBACK(media_stream, async_request, IMFMediaStream_iface)
 static HRESULT media_stream_async_request_thin(struct media_stream *stream, IMFAsyncResult *result)
 {
     struct media_source *source = media_source_from_IMFMediaSource(stream->source);
-    IUnknown *token = IMFAsyncResult_GetStateNoAddRef(result);
+    struct async_request_params *params;
+    IUnknown *state;
     HRESULT hr = S_OK;
 
+    if (!(state = IMFAsyncResult_GetStateNoAddRef(result))) return E_INVALIDARG;
+    params = async_request_params_from_IUnknown(state);
+
     EnterCriticalSection(&source->cs);
-    stream->pending_thin = TRUE;
-    hr = media_source_request_stream_sample(source, stream, token);
+    if (params->generation == source->generation)
+    {
+        stream->pending_thin = TRUE;
+        hr = media_source_request_stream_sample(source, stream, params->token);
+    }
     LeaveCriticalSection(&source->cs);
 
     return hr;
@@ -933,6 +1057,8 @@ static HRESULT WINAPI media_stream_RequestSample(IMFMediaStream *iface, IUnknown
 {
     struct media_stream *stream = media_stream_from_IMFMediaStream(iface);
     struct media_source *source = media_source_from_IMFMediaSource(stream->source);
+    BOOL thin = FALSE;
+    IUnknown *op = NULL;
     HRESULT hr;
 
     TRACE("stream %p, token %p\n", stream, token);
@@ -945,12 +1071,19 @@ static HRESULT WINAPI media_stream_RequestSample(IMFMediaStream *iface, IUnknown
         hr = MF_E_MEDIA_SOURCE_WRONGSTATE;
     else if (stream->eos)
         hr = MF_E_END_OF_STREAM;
-    else if (source->thin)
-        hr = MFPutWorkItem(MFASYNC_CALLBACK_QUEUE_STANDARD, &stream->async_request_thin_iface, token);
+    else if (FAILED(hr = async_request_params_create(token, source->generation, &op)))
+        ;
     else
-        hr = MFPutWorkItem(MFASYNC_CALLBACK_QUEUE_STANDARD, &stream->async_request_iface, token);
+        thin = source->thin;
 
     LeaveCriticalSection(&source->cs);
+
+    if (op)
+    {
+        hr = MFPutWorkItem(MFASYNC_CALLBACK_QUEUE_STANDARD,
+                thin ? &stream->async_request_thin_iface : &stream->async_request_iface, op);
+        IUnknown_Release(op);
+    }
 
     return hr;
 }
@@ -1047,7 +1180,6 @@ static HRESULT WINAPI media_source_IMFGetService_GetService(IMFGetService *iface
             return S_OK;
         }
     }
-
     FIXME("Unsupported service %s / riid %s\n", debugstr_guid(service), debugstr_guid(riid));
     *obj = NULL;
     return E_NOINTERFACE;
@@ -1261,7 +1393,6 @@ static ULONG WINAPI media_source_Release(IMFMediaSource *iface)
         free(source->streams);
 
         IMFMediaEventQueue_Release(source->queue);
-        IMFByteStream_Release(source->stream);
         free(source->url);
 
         source->cs.DebugInfo->Spare[0] = 0;
@@ -1396,7 +1527,7 @@ static HRESULT WINAPI media_source_Start(IMFMediaSource *iface, IMFPresentationD
         hr = MF_E_SHUTDOWN;
     else if (!IsEqualIID(format, &GUID_NULL))
         hr = MF_E_UNSUPPORTED_TIME_FORMAT;
-    else if (SUCCEEDED(hr = async_start_params_create(descriptor, format, position, &op)))
+    else if (SUCCEEDED(hr = async_start_params_create(descriptor, format, position, ++source->generation, &op)))
     {
         hr = MFPutWorkItem(MFASYNC_CALLBACK_QUEUE_STANDARD, &source->async_start_iface, op);
         IUnknown_Release(op);
@@ -1465,6 +1596,7 @@ static HRESULT WINAPI media_source_Shutdown(IMFMediaSource *iface)
     IMFMediaEventQueue_QueueEventParamVar(source->queue, MEError, &GUID_NULL, MF_E_SHUTDOWN, NULL);
     IMFMediaEventQueue_Shutdown(source->queue);
     IMFByteStream_Close(source->stream);
+    IMFByteStream_Release(source->stream);
 
     while (source->stream_count--)
     {
@@ -1518,8 +1650,11 @@ static HRESULT media_type_from_winedmo_format( GUID major, union winedmo_format 
 
     if (IsEqualGUID( &major, &MFMediaType_Video ))
         return media_type_from_mf_video_format( &format->video, media_type );
+
     if (IsEqualGUID( &major, &MFMediaType_Audio ))
-        return MFCreateAudioMediaType( &format->audio, (IMFAudioMediaType **)media_type );
+    {
+        return MFCreateAudioMediaType(&format->audio, (IMFAudioMediaType **)media_type);
+    }
 
     FIXME( "Unsupported major type %s\n", debugstr_guid( &major ) );
     return E_NOTIMPL;
@@ -1725,6 +1860,112 @@ static HRESULT stream_descriptor_create(UINT32 id, IMFMediaType *media_type, IMF
     return hr;
 }
 
+struct bytestream_read_callback
+{
+    IMFAsyncCallback IMFAsyncCallback_iface;
+    LONG refcount;
+    HANDLE event;
+    IMFAsyncResult *result;
+};
+
+static struct bytestream_read_callback *bytestream_read_callback_from_iface(IMFAsyncCallback *iface)
+{
+    return CONTAINING_RECORD(iface, struct bytestream_read_callback, IMFAsyncCallback_iface);
+}
+
+static HRESULT WINAPI bytestream_read_callback_QueryInterface(IMFAsyncCallback *iface, REFIID riid, void **obj)
+{
+    if (IsEqualIID(riid, &IID_IMFAsyncCallback) || IsEqualIID(riid, &IID_IUnknown))
+    {
+        *obj = iface;
+        IMFAsyncCallback_AddRef(iface);
+        return S_OK;
+    }
+    *obj = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI bytestream_read_callback_AddRef(IMFAsyncCallback *iface)
+{
+    struct bytestream_read_callback *cb = bytestream_read_callback_from_iface(iface);
+    return InterlockedIncrement(&cb->refcount);
+}
+
+static ULONG WINAPI bytestream_read_callback_Release(IMFAsyncCallback *iface)
+{
+    struct bytestream_read_callback *cb = bytestream_read_callback_from_iface(iface);
+    ULONG refcount = InterlockedDecrement(&cb->refcount);
+    if (!refcount)
+    {
+        CloseHandle(cb->event);
+        free(cb);
+    }
+    return refcount;
+}
+
+static HRESULT WINAPI bytestream_read_callback_GetParameters(IMFAsyncCallback *iface, DWORD *flags, DWORD *queue)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI bytestream_read_callback_Invoke(IMFAsyncCallback *iface, IMFAsyncResult *result)
+{
+    struct bytestream_read_callback *cb = bytestream_read_callback_from_iface(iface);
+    cb->result = result;
+    IMFAsyncResult_AddRef(result);
+    SetEvent(cb->event);
+    return S_OK;
+}
+
+static const IMFAsyncCallbackVtbl bytestream_read_callback_vtbl =
+{
+    bytestream_read_callback_QueryInterface,
+    bytestream_read_callback_AddRef,
+    bytestream_read_callback_Release,
+    bytestream_read_callback_GetParameters,
+    bytestream_read_callback_Invoke,
+};
+
+/* Some IMFByteStream implementations only support asynchronous reads and signal
+ * this by returning pcbRead == 0xffffffff from the synchronous Read method.
+ * Fall back to BeginRead/EndRead in that case. */
+static HRESULT bytestream_read(IMFByteStream *stream, BYTE *buffer, ULONG size, ULONG *read_size)
+{
+    struct bytestream_read_callback *cb;
+    IMFAsyncResult *result;
+    HRESULT hr;
+
+    if (FAILED(hr = IMFByteStream_Read(stream, buffer, size, read_size)))
+        return hr;
+    if (*read_size != 0xffffffff)
+        return S_OK;
+
+    if (!(cb = calloc(1, sizeof(*cb))))
+        return E_OUTOFMEMORY;
+    cb->IMFAsyncCallback_iface.lpVtbl = &bytestream_read_callback_vtbl;
+    cb->refcount = 1;
+    cb->event = CreateEventA(NULL, FALSE, FALSE, NULL);
+
+    if (FAILED(hr = IMFByteStream_BeginRead(stream, buffer, size, &cb->IMFAsyncCallback_iface, NULL)))
+    {
+        WARN("BeginRead failed, hr %#lx.\n", hr);
+        IMFAsyncCallback_Release(&cb->IMFAsyncCallback_iface);
+        return hr;
+    }
+    if (WaitForSingleObject(cb->event, 5000) != WAIT_OBJECT_0)
+    {
+        ERR("Timed out waiting for BeginRead.\n");
+        IMFAsyncCallback_Release(&cb->IMFAsyncCallback_iface);
+        return E_FAIL;
+    }
+    result = cb->result;
+    cb->result = NULL;
+    IMFAsyncCallback_Release(&cb->IMFAsyncCallback_iface);
+    hr = IMFByteStream_EndRead(stream, result, read_size);
+    IMFAsyncResult_Release(result);
+    return hr;
+}
+
 static NTSTATUS CDECL media_source_seek_cb( struct winedmo_stream *stream, UINT64 *pos )
 {
     struct media_source *source = CONTAINING_RECORD(stream, struct media_source, winedmo_stream);
@@ -1732,16 +1973,26 @@ static NTSTATUS CDECL media_source_seek_cb( struct winedmo_stream *stream, UINT6
 
     if (FAILED(IMFByteStream_Seek(source->stream, msoBegin, *pos, 0, pos)))
         return STATUS_UNSUCCESSFUL;
+
+    source->position = *pos;
     return STATUS_SUCCESS;
 }
 
 static NTSTATUS CDECL media_source_read_cb(struct winedmo_stream *stream, BYTE *buffer, ULONG *size)
 {
     struct media_source *source = CONTAINING_RECORD(stream, struct media_source, winedmo_stream);
+    UINT64 position;
+
     TRACE("stream %p, buffer %p, size %p\n", stream, buffer, size);
 
-    if (FAILED(IMFByteStream_Read(source->stream, buffer, *size, size)))
+    if (SUCCEEDED(IMFByteStream_GetCurrentPosition(source->stream, &position)) && position != source->position
+            && FAILED(IMFByteStream_SetCurrentPosition(source->stream, source->position)))
+        WARN("Failed to set current position\n");
+
+    if (FAILED(bytestream_read(source->stream, buffer, *size, size)))
         return STATUS_UNSUCCESSFUL;
+
+    source->position += *size;
     return STATUS_SUCCESS;
 }
 
@@ -2025,7 +2276,7 @@ static HRESULT byte_stream_plugin_create(IUnknown *outer, REFIID riid, void **ou
     return hr;
 }
 
-static BOOL use_gst_byte_stream_handler(void)
+static BOOL use_winedmo_byte_stream_handler(void)
 {
     BOOL result;
     DWORD size = sizeof(result);
@@ -2035,7 +2286,7 @@ static BOOL use_gst_byte_stream_handler(void)
                        RRF_RT_REG_DWORD, NULL, &result, &size ))
         return !result;
 
-    return TRUE;
+    return FALSE;
 }
 
 static HRESULT WINAPI asf_byte_stream_plugin_factory_CreateInstance(IClassFactory *iface,
@@ -2043,11 +2294,11 @@ static HRESULT WINAPI asf_byte_stream_plugin_factory_CreateInstance(IClassFactor
 {
     NTSTATUS status;
 
-    if ((status = winedmo_demuxer_check("video/x-ms-asf")) || use_gst_byte_stream_handler())
+    if ((status = winedmo_demuxer_check("video/x-ms-asf")) || use_winedmo_byte_stream_handler())
     {
-        static const GUID CLSID_GStreamerByteStreamHandler = {0x317df618,0x5e5a,0x468a,{0x9f,0x15,0xd8,0x27,0xa9,0xa0,0x81,0x62}};
+        static const GUID CLSID_WineDMOByteStreamHandler = {0x317df618,0x5e5a,0x468a,{0x9f,0x15,0xd8,0x27,0xa9,0xa0,0x81,0x62}};
         if (status) WARN("Unsupported demuxer, status %#lx.\n", status);
-        return CoCreateInstance(&CLSID_GStreamerByteStreamHandler, outer, CLSCTX_INPROC_SERVER, riid, out);
+        return CoCreateInstance(&CLSID_WineDMOByteStreamHandler, outer, CLSCTX_INPROC_SERVER, riid, out);
     }
 
     return byte_stream_plugin_create(outer, riid, out);
@@ -2069,11 +2320,11 @@ static HRESULT WINAPI avi_byte_stream_plugin_factory_CreateInstance(IClassFactor
 {
     NTSTATUS status;
 
-    if ((status = winedmo_demuxer_check("video/avi")) || use_gst_byte_stream_handler())
+    if ((status = winedmo_demuxer_check("video/avi")) || use_winedmo_byte_stream_handler())
     {
-        static const GUID CLSID_GStreamerByteStreamHandler = {0x317df618,0x5e5a,0x468a,{0x9f,0x15,0xd8,0x27,0xa9,0xa0,0x81,0x62}};
+        static const GUID CLSID_WineDMOByteStreamHandler = {0x317df618,0x5e5a,0x468a,{0x9f,0x15,0xd8,0x27,0xa9,0xa0,0x81,0x62}};
         if (status) WARN("Unsupported demuxer, status %#lx.\n", status);
-        return CoCreateInstance(&CLSID_GStreamerByteStreamHandler, outer, CLSCTX_INPROC_SERVER, riid, out);
+        return CoCreateInstance(&CLSID_WineDMOByteStreamHandler, outer, CLSCTX_INPROC_SERVER, riid, out);
     }
 
     return byte_stream_plugin_create(outer, riid, out);
@@ -2095,11 +2346,11 @@ static HRESULT WINAPI mpeg4_byte_stream_plugin_factory_CreateInstance(IClassFact
 {
     NTSTATUS status;
 
-    if ((status = winedmo_demuxer_check("video/mp4")) || use_gst_byte_stream_handler())
+    if ((status = winedmo_demuxer_check("video/mp4")) || use_winedmo_byte_stream_handler())
     {
-        static const GUID CLSID_GStreamerByteStreamHandler = {0x317df618,0x5e5a,0x468a,{0x9f,0x15,0xd8,0x27,0xa9,0xa0,0x81,0x62}};
+        static const GUID CLSID_WineDMOByteStreamHandler = {0x317df618,0x5e5a,0x468a,{0x9f,0x15,0xd8,0x27,0xa9,0xa0,0x81,0x62}};
         if (status) WARN("Unsupported demuxer, status %#lx.\n", status);
-        return CoCreateInstance(&CLSID_GStreamerByteStreamHandler, outer, CLSCTX_INPROC_SERVER, riid, out);
+        return CoCreateInstance(&CLSID_WineDMOByteStreamHandler, outer, CLSCTX_INPROC_SERVER, riid, out);
     }
 
     return byte_stream_plugin_create(outer, riid, out);
@@ -2121,11 +2372,11 @@ static HRESULT WINAPI wav_byte_stream_plugin_factory_CreateInstance(IClassFactor
 {
     NTSTATUS status;
 
-    if ((status = winedmo_demuxer_check("audio/wav")) || use_gst_byte_stream_handler())
+    if ((status = winedmo_demuxer_check("audio/wav")) || use_winedmo_byte_stream_handler())
     {
-        static const GUID CLSID_GStreamerByteStreamHandler = {0x317df618,0x5e5a,0x468a,{0x9f,0x15,0xd8,0x27,0xa9,0xa0,0x81,0x62}};
+        static const GUID CLSID_WineDMOByteStreamHandler = {0x317df618,0x5e5a,0x468a,{0x9f,0x15,0xd8,0x27,0xa9,0xa0,0x81,0x62}};
         if (status) WARN("Unsupported demuxer, status %#lx.\n", status);
-        return CoCreateInstance(&CLSID_GStreamerByteStreamHandler, outer, CLSCTX_INPROC_SERVER, riid, out);
+        return CoCreateInstance(&CLSID_WineDMOByteStreamHandler, outer, CLSCTX_INPROC_SERVER, riid, out);
     }
 
     return byte_stream_plugin_create(outer, riid, out);
@@ -2147,11 +2398,11 @@ static HRESULT WINAPI mp3_byte_stream_plugin_factory_CreateInstance(IClassFactor
 {
     NTSTATUS status;
 
-    if ((status = winedmo_demuxer_check("audio/mp3")) || use_gst_byte_stream_handler())
+    if ((status = winedmo_demuxer_check("audio/mp3")) || use_winedmo_byte_stream_handler())
     {
-        static const GUID CLSID_GStreamerByteStreamHandler = {0x317df618,0x5e5a,0x468a,{0x9f,0x15,0xd8,0x27,0xa9,0xa0,0x81,0x62}};
+        static const GUID CLSID_WineDMOByteStreamHandler = {0x317df618,0x5e5a,0x468a,{0x9f,0x15,0xd8,0x27,0xa9,0xa0,0x81,0x62}};
         if (status) WARN("Unsupported demuxer, status %#lx.\n", status);
-        return CoCreateInstance(&CLSID_GStreamerByteStreamHandler, outer, CLSCTX_INPROC_SERVER, riid, out);
+        return CoCreateInstance(&CLSID_WineDMOByteStreamHandler, outer, CLSCTX_INPROC_SERVER, riid, out);
     }
 
     return byte_stream_plugin_create(outer, riid, out);

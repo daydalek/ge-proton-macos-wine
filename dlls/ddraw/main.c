@@ -308,6 +308,7 @@ static HRESULT DDRAW_Create(const GUID *guid, void **out, IUnknown *outer_unknow
     if (guid == (GUID *) DDCREATE_EMULATIONONLY)
     {
         device_type = WINED3D_DEVICE_TYPE_REF;
+        if (GetModuleHandleW(L"winemac.drv")) flags |= WINED3D_NO3D;
     }
     else if (guid == (GUID *) DDCREATE_HARDWAREONLY)
     {
