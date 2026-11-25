@@ -166,9 +166,10 @@ static NTSTATUS audio_format_from_codec_params( const AVCodecParameters *params,
     UINT format_tag, wave_format_size = sizeof(WAVEFORMATEX);
     UINT64 channel_mask;
     int channels;
+    NTSTATUS status;
 
     if (params->codec_id == AV_CODEC_ID_AAC) return heaac_wave_format_from_codec_params( params, format, format_size );
-    if (params->codec_id == AV_CODEC_ID_MP1) wave_format_size = sizeof(MPEG1WAVEFORMAT);
+    if (params->codec_id == AV_CODEC_ID_MP1 || params->codec_id == AV_CODEC_ID_MP2) wave_format_size = sizeof(MPEG1WAVEFORMAT);
     if (params->codec_id == AV_CODEC_ID_MP3) wave_format_size = sizeof(MPEGLAYER3WAVEFORMAT);
     if (params->codec_id == AV_CODEC_ID_WMAV1) wave_format_size = sizeof(MSAUDIO1WAVEFORMAT);
     if (params->codec_id == AV_CODEC_ID_WMAV2) wave_format_size = sizeof(WMAUDIO2WAVEFORMAT);
@@ -205,7 +206,17 @@ static NTSTATUS audio_format_from_codec_params( const AVCodecParameters *params,
                                                          &subtype, channel_mask );
     }
 
-    return wave_format_ex_from_codec_params( params, format, format_size, wave_format_size, format_tag );
+    status = wave_format_ex_from_codec_params( params, format, format_size, wave_format_size, format_tag );
+    if (!status && (params->codec_id == AV_CODEC_ID_MP1 || params->codec_id == AV_CODEC_ID_MP2))
+    {
+        MPEG1WAVEFORMAT *mpeg = format;
+
+        mpeg->fwHeadLayer = params->codec_id == AV_CODEC_ID_MP1 ? ACM_MPEG_LAYER1 : ACM_MPEG_LAYER2;
+        mpeg->dwHeadBitrate = params->bit_rate;
+        mpeg->fwHeadMode = channels == 1 ? ACM_MPEG_SINGLECHANNEL : ACM_MPEG_STEREO;
+        if (params->sample_rate >= 32000) mpeg->fwHeadFlags = ACM_MPEG_ID_MPEG1;
+    }
+    return status;
 }
 
 static GUID subtype_from_pixel_format( enum AVPixelFormat fmt )

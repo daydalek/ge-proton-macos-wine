@@ -1511,7 +1511,11 @@ NTSTATUS transform_get_output( void *arg )
          * (legacy PROVIDES_SAMPLES query) get STATUS_BUFFER_TOO_SMALL with the full
          * size; all other callers receive up to capacity bytes with INCOMPLETE set when
          * more data remains. */
+        /* MPEG audio and video share the container timeline. Keep the audio
+         * start offset so DirectShow schedules both streams against the same clock. */
         if (!t->audio_started && base_pts != INT64_MIN
+                && t->avctx->codec_id != AV_CODEC_ID_MP1 && t->avctx->codec_id != AV_CODEC_ID_MP2
+                && t->avctx->codec_id != AV_CODEC_ID_MP3
                 && (t->avctx->codec_id != AV_CODEC_ID_AAC || !t->split_aac_output))
             t->audio_output_pts_adjust = base_pts;
         if (base_pts != INT64_MIN && t->audio_output_pts_adjust != INT64_MIN)
