@@ -56,6 +56,7 @@ WineFakeDlls=FakeDlls
 UpdateInis=SystemIni
 CopyFiles=ColorFiles,EtcFiles,InfFiles,NlsFiles,SortFiles,WinmdFiles
 AddReg=\
+    AppDefaults,\
     Classes,\
     ContentIndex,\
     ControlClass,\
@@ -404,6 +405,12 @@ HKLM,%CurrentVersion%,"CommonFilesDir (x86)",,"%16427%"
 [CurrentVersionWow64.ntarm]
 HKLM,%CurrentVersion%,"ProgramFilesDir (Arm)",,"%16422%"
 HKLM,%CurrentVersion%,"CommonFilesDir (Arm)",,"%16427%"
+
+[AppDefaults]
+;; Steam compatibility arguments, consumed by kernelbase's CommandLineAppend support.
+;; FLG_ADDREG_NOCLOBBER keeps user values; an empty string disables the append.
+HKCU,Software\Wine\AppDefaults\steam.exe,"CommandLineAppend",2,"-allosarches -cef-force-32bit"
+HKCU,Software\Wine\AppDefaults\steamwebhelper.exe,"CommandLineAppend",2,"--no-sandbox --in-process-gpu --disable-gpu"
 
 [Debugger]
 HKLM,%CurrentVersionNT%\AeDebug,"Debugger",2,"winedbg --auto %ld %ld"
