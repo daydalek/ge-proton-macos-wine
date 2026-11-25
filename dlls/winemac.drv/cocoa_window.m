@@ -418,6 +418,7 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
 @property (readonly, copy, nonatomic) NSArray* childWineWindows;
 
 @property (retain, nonatomic) CAShapeLayer* contentViewMaskLayer;
+@property (nonatomic) CGRect fullscreenContentRect;
 
     - (void) setShape:(CGPathRef)newShape;
 
@@ -528,6 +529,16 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
             return;
 
         imageRect = layer.bounds;
+        if (!CGRectIsEmpty(window.fullscreenContentRect) && !_everHadGLContext)
+        {
+            /* GDI surfaces start at the logical window origin. The fullscreen
+             * mask describes the centered physical content area. Crop away
+             * surface allocation padding and place the pixels inside it. */
+            imageRect = CGRectMake(0, 0, window.fullscreenContentRect.size.width,
+                                        window.fullscreenContentRect.size.height);
+            layer.contentsGravity = kCAGravityCenter;
+        }
+        else layer.contentsGravity = kCAGravityTopLeft;
         imageRect.origin.x *= layer.contentsScale;
         imageRect.origin.y *= layer.contentsScale;
         imageRect.size.width *= layer.contentsScale;
@@ -2852,6 +2863,8 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
 
     - (void) setMask:(CGRect)rect
     {
+        self.fullscreenContentRect = rect;
+        [self.contentView setNeedsDisplay:YES];
         /* Draw black bars to cover every part of the window except for 'rect'.
          * Intended for use on a window covering the full screen.
          */
