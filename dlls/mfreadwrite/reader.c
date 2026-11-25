@@ -956,6 +956,8 @@ static void transform_entry_release_allocator(struct transform_entry *entry)
 static HRESULT source_reader_allocate_d3d_sample(struct source_reader *reader, struct transform_entry *entry,
         IMFMediaType *media_type, IMFSample **out)
 {
+    IMFVideoSampleAllocatorEx *allocator_ex;
+    IMFAttributes *attributes = NULL;
     IMFVideoSampleAllocator *allocator;
     GUID major_type;
     GUID subtype;
@@ -979,9 +981,20 @@ static HRESULT source_reader_allocate_d3d_sample(struct source_reader *reader, s
     if (FAILED(hr = MFCreateVideoSampleAllocatorEx(&IID_IMFVideoSampleAllocator, (void **)&allocator)))
         return hr;
 
-    if (SUCCEEDED(hr = IMFVideoSampleAllocator_SetDirectXManager(allocator, reader->device_manager))
-            && SUCCEEDED(hr = IMFVideoSampleAllocator_InitializeSampleAllocator(allocator, 6, media_type))
-            && SUCCEEDED(hr = IMFVideoSampleAllocator_AllocateSample(allocator, out)))
+    if (SUCCEEDED(hr = IMFVideoSampleAllocator_SetDirectXManager(allocator, reader->device_manager)) &&
+            SUCCEEDED(hr = IMFVideoSampleAllocator_QueryInterface(allocator, &IID_IMFVideoSampleAllocatorEx,
+                    (void **)&allocator_ex)))
+    {
+        IMFTransform_GetOutputStreamAttributes(entry->transform, 0, &attributes);
+        hr = IMFVideoSampleAllocatorEx_InitializeSampleAllocatorEx(allocator_ex, 6, 6, attributes, media_type);
+        if (attributes)
+            IMFAttributes_Release(attributes);
+        IMFVideoSampleAllocatorEx_Release(allocator_ex);
+    }
+
+    if (SUCCEEDED(hr))
+        hr = IMFVideoSampleAllocator_AllocateSample(allocator, out);
+    if (SUCCEEDED(hr))
     {
         entry->allocator = allocator;
         entry->allocator_type = media_type;
