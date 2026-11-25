@@ -27,6 +27,7 @@
 
 #include "macdrv.h"
 #include "winreg.h"
+#include "wine/macdrv_video.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(macdrv);
 
@@ -147,6 +148,116 @@ static MACDRV_PDEVICE *create_mac_physdev(void)
 
 
 /**********************************************************************
+ *              macdrv_video_escape
+ *
+ * Present or release a VMR7 video frame in a native child window layered
+ * above any OpenGL or Metal surfaces of the same top-level window.
+ * Returns non-zero when the escape was handled.
+ */
+static INT macdrv_video_escape(PHYSDEV dev, INT count, const void *data)
+{
+    const struct macdrv_video_header *header = data;
+    const void *payload;
+    uint64_t payload_size;
+    uint32_t command;
+    HWND hwnd, toplevel;
+    struct macdrv_win_data *win_data;
+    macdrv_window window;
+    CGRect target;
+    RECT rect;
+    INT ret = 0;
+
+    if (count < 0 || !(command = macdrv_video_message_parse(data, count, &payload, &payload_size)))
+        return 0;
+
+    if (!(hwnd = NtUserWindowFromDC(dev->hdc))) return 0;
+    if (!(toplevel = NtUserGetAncestor(hwnd, GA_ROOT))) toplevel = hwnd;
+
+    if (command == MACDRV_VIDEO_CMD_PRESENT)
+    {
+        /* Map the video window's client rect into the top-level window's
+         * content area, exactly like macdrv_client_surface_update(). */
+        if (!NtUserGetClientRect(hwnd, &rect, NtUserGetWinMonitorDpi(hwnd, MDT_RAW_DPI)))
+            return 0;   /* video window may have been destroyed concurrently */
+        NtUserMapWindowPoints(hwnd, toplevel, (POINT *)&rect, 2,
+                              NtUserGetWinMonitorDpi(toplevel, MDT_RAW_DPI));
+        /* A hidden or empty video window must drop any existing native
+         * frame instead of popping it on screen. */
+        if (!NtUserIsWindowVisible(hwnd) || IsRectEmpty(&rect))
+            command = MACDRV_VIDEO_CMD_RELEASE;
+    }
+
+    if (!(win_data = get_win_data(toplevel))) return 0;
+    if (command == MACDRV_VIDEO_CMD_PRESENT)
+        OffsetRect(&rect, win_data->rects.client.left - win_data->rects.visible.left,
+                   win_data->rects.client.top - win_data->rects.visible.top);
+    window = win_data->cocoa_window;
+    if (window) CFRetain(window);
+    release_win_data(win_data);
+    if (!window) return 0;
+
+    if (command == MACDRV_VIDEO_CMD_RELEASE)
+    {
+        macdrv_window_clear_video(window, header->token);
+        CFRelease(window);
+        return 1;
+    }
+
+    target = cgrect_from_rect(rect);
+
+    /* Clone the caller's pixels synchronously; the frame buffer is not
+     * referenced once this call returns. */
+    {
+        CGDataProviderRef provider = NULL;
+        CGColorSpaceRef colorspace = NULL;
+        CFDataRef frame_data;
+        CGImageRef image = NULL;
+
+        if ((frame_data = CFDataCreate(NULL, payload, payload_size)))
+        {
+            provider = CGDataProviderCreateWithCFData(frame_data);
+            colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+            if (provider && colorspace)
+                image = CGImageCreate(header->width, header->height, 8, 32,
+                        header->stride, colorspace,
+                        kCGBitmapByteOrder32Little | kCGImageAlphaNoneSkipFirst,
+                        provider, NULL, false, kCGRenderingIntentDefault);
+            if (image)
+                ret = macdrv_window_present_video(window, header->token, image, target);
+            CGImageRelease(image);
+            CGColorSpaceRelease(colorspace);
+            CGDataProviderRelease(provider);
+            CFRelease(frame_data);
+        }
+    }
+
+    CFRelease(window);
+    return ret;
+}
+
+
+/**********************************************************************
+ *              ExtEscape (MACDRV.@)
+ */
+static INT macdrv_ExtEscape(PHYSDEV dev, INT escape, INT in_count, LPCVOID in_data,
+                            INT out_count, LPVOID out_data)
+{
+    if (escape == QUERYESCSUPPORT && in_data && in_count >= sizeof(USHORT))
+    {
+        DWORD code = in_count < sizeof(DWORD) ? *(const USHORT *)in_data : *(const DWORD *)in_data;
+        if (code == MACDRV_VIDEO_ESCAPE_ID) return TRUE;
+    }
+    else if (escape == MACDRV_VIDEO_ESCAPE_ID)
+    {
+        return macdrv_video_escape(dev, in_count, in_data);
+    }
+
+    dev = GET_NEXT_PHYSDEV( dev, pExtEscape );
+    return dev->funcs->pExtEscape( dev, escape, in_count, in_data, out_count, out_data );
+}
+
+
+/**********************************************************************
  *              CreateDC (MACDRV.@)
  */
 static BOOL macdrv_CreateDC(PHYSDEV *pdev, LPCWSTR device, LPCWSTR output, const DEVMODEW* initData)
@@ -237,6 +348,7 @@ static const struct user_driver_funcs macdrv_funcs =
     .dc_funcs.pCreateDC = macdrv_CreateDC,
     .dc_funcs.pDeleteDC = macdrv_DeleteDC,
     .dc_funcs.pGetDeviceCaps = macdrv_GetDeviceCaps,
+    .dc_funcs.pExtEscape = macdrv_ExtEscape,
     .dc_funcs.pGetDeviceGammaRamp = macdrv_GetDeviceGammaRamp,
     .dc_funcs.pSetDeviceGammaRamp = macdrv_SetDeviceGammaRamp,
     .dc_funcs.priority = GDI_PRIORITY_GRAPHICS_DRV,

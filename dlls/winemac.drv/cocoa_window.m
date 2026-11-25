@@ -1240,6 +1240,8 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
     {
         [[[NSWorkspace sharedWorkspace] notificationCenter] removeObserver:self];
         [[NSNotificationCenter defaultCenter] removeObserver:self];
+        [self wine_clearVideoSurfaces];
+        [videoSurfaces release];
         [queue release];
         [latentChildWindows release];
         [latentParentWindow release];
@@ -3184,11 +3186,18 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
     - (void) windowDidChangeOcclusionState:(NSNotification*)notification
     {
         [self checkWineDisplayLink];
+        [self wine_updateVideoSurfaces];
     }
 
     - (void) windowDidChangeScreen:(NSNotification*)notification
     {
         [self checkWineDisplayLink];
+        [self wine_updateVideoSurfaces];
+    }
+
+    - (void) windowDidChangeBackingProperties:(NSNotification*)notification
+    {
+        [self wine_updateVideoSurfaces];
     }
 
     - (void)windowDidDeminiaturize:(NSNotification *)notification
@@ -3218,6 +3227,7 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
 
         [self windowDidResize:notification];
         [self checkWineDisplayLink];
+        [self wine_updateVideoSurfaces];
     }
 
     - (void) windowDidEndLiveResize:(NSNotification *)notification
@@ -3275,6 +3285,8 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
         event = macdrv_create_event(WINDOW_DID_MINIMIZE, self);
         [queue postEvent:event];
         macdrv_release_event(event);
+
+        [self wine_updateVideoSurfaces];
     }
 
     - (void)windowDidMove:(NSNotification *)notification
@@ -3297,6 +3309,8 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
     - (void)windowDidResize:(NSNotification *)notification skipSizeMove:(BOOL)skipSizeMove
     {
         NSRect frame = self.wine_fractionalFrame;
+
+        [self wine_updateVideoSurfaces];
 
         if ([self inLiveResize])
         {
@@ -3374,6 +3388,8 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
                 child.latentParentWindow = nil;
         }
         [latentChildWindows removeAllObjects];
+
+        [self wine_clearVideoSurfaces];
     }
 
     - (void) windowWillEnterFullScreen:(NSNotification*)notification
@@ -4350,3 +4366,5 @@ void macdrv_clear_ime_text(void)
             [[window contentView] clearMarkedText];
     });
 }
+
+#include "cocoa_vmr7.h"

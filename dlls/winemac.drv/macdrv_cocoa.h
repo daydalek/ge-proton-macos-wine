@@ -613,5 +613,8 @@ extern int is_skyrim_se_launcher(void);
 extern void macdrv_client_surface_presented(const macdrv_event *event);
 extern void *macdrv_get_view_d3dmetal_client_surface(macdrv_view v);
 void macdrv_set_view_d3dmetal_client_surface(macdrv_view v, void *client_surface);
+extern bool macdrv_window_present_video(macdrv_window w, uint64_t token,
+                                        CGImageRef image, CGRect rect);
+extern void macdrv_window_clear_video(macdrv_window w, uint64_t token);
 
 #endif  /* __WINE_MACDRV_COCOA_H */

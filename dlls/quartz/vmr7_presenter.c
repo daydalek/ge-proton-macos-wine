@@ -21,6 +21,7 @@
 #include "quartz_private.h"
 
 #include "wine/debug.h"
+#include "wine/macdrv_video.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(quartz);
 
@@ -39,6 +40,15 @@ struct vmr7_presenter
     HWND window;
     BOOL yuv_to_rgb;
 
+    /* Native winemac video presentation state.  native_support is 0 while
+     * unprobed, 1 when the driver accepted QUERYESCSUPPORT, -1 otherwise.
+     * native_root is the root HWND the native surface lives on; it can
+     * outlive the video child window, so release goes through it. */
+    int native_support;
+    HWND native_root;
+    BYTE *native_frame;
+    SIZE_T native_frame_size;
+
     SIZE native_size, aspect_ratio;
 };
 
@@ -46,6 +56,8 @@ static struct vmr7_presenter *impl_from_IVMRImagePresenter(IVMRImagePresenter *i
 {
     return CONTAINING_RECORD(iface, struct vmr7_presenter, IVMRImagePresenter_iface);
 }
+
+static void vmr7_presenter_release_native(struct vmr7_presenter *presenter);
 
 static HRESULT WINAPI image_presenter_QueryInterface(IVMRImagePresenter *iface, REFIID iid, void **out)
 {
@@ -87,6 +99,8 @@ static ULONG WINAPI image_presenter_Release(IVMRImagePresenter *iface)
     TRACE("%p decreasing refcount to %lu.\n", presenter, refcount);
     if (!refcount)
     {
+        vmr7_presenter_release_native(presenter);
+        free(presenter->native_frame);
         if (presenter->frontbuffer)
             IDirectDrawSurface7_Release(presenter->frontbuffer);
         IDirectDrawSurface7_Release(presenter->primary);
@@ -96,14 +110,147 @@ static ULONG WINAPI image_presenter_Release(IVMRImagePresenter *iface)
     return refcount;
 }
 
+static BOOL vmr7_presenter_native_supported(struct vmr7_presenter *presenter)
+{
+    DWORD escape = MACDRV_VIDEO_ESCAPE_ID;
+    HDC dc;
+
+    if (!presenter->window) return FALSE;
+    if (presenter->native_support) return presenter->native_support > 0;
+    if (!(dc = GetDC(presenter->window))) return FALSE;
+    presenter->native_support =
+            ExtEscape(dc, QUERYESCSUPPORT, sizeof(escape), (const char *)&escape, 0, NULL) > 0 ? 1 : -1;
+    ReleaseDC(presenter->window, dc);
+    return presenter->native_support > 0;
+}
+
+static void vmr7_presenter_release_native(struct vmr7_presenter *presenter)
+{
+    struct macdrv_video_header header;
+    HDC dc;
+
+    if (!presenter->native_root) return;
+    memset(&header, 0, sizeof(header));
+    header.version = MACDRV_VIDEO_PROTOCOL_VERSION;
+    header.command = MACDRV_VIDEO_CMD_RELEASE;
+    header.token = (uint64_t)(ULONG_PTR)presenter;
+    /* Release through the root HWND: the video child window may already
+     * be destroyed while the game window still exists. */
+    if ((dc = GetDC(presenter->native_root)))
+    {
+        ExtEscape(dc, MACDRV_VIDEO_ESCAPE_ID, sizeof(header), (const char *)&header, 0, NULL);
+        ReleaseDC(presenter->native_root, dc);
+    }
+    presenter->native_root = NULL;
+}
+
+static BOOL vmr7_presenter_present_native(struct vmr7_presenter *presenter, IDirectDrawSurface7 *surface)
+{
+    struct macdrv_video_header *header;
+    DDSURFACEDESC2 desc = {.dwSize = sizeof(desc)};
+    uint64_t payload_size, total_size;
+    BOOL ret = FALSE;
+    HDC dc;
+
+    if (!vmr7_presenter_native_supported(presenter))
+        return FALSE;
+
+    if (FAILED(IDirectDrawSurface7_Lock(surface, NULL, &desc, DDLOCK_READONLY | DDLOCK_WAIT, NULL)))
+        return FALSE;
+
+    if ((desc.ddpfPixelFormat.dwFlags & DDPF_RGB)
+            && desc.ddpfPixelFormat.dwRGBBitCount == 32
+            && desc.ddpfPixelFormat.dwRBitMask == 0x00ff0000
+            && desc.ddpfPixelFormat.dwGBitMask == 0x0000ff00
+            && desc.ddpfPixelFormat.dwBBitMask == 0x000000ff
+            && desc.lPitch != INT_MIN && desc.lPitch != 0
+            && desc.dwWidth && desc.dwHeight
+            && (uint64_t)desc.dwWidth * 4 <= (uint64_t)INT_MAX
+            && (desc.lPitch < 0 ? -(int64_t)desc.lPitch : desc.lPitch) >= (int64_t)desc.dwWidth * 4
+            && macdrv_video_present_payload_size(desc.dwWidth, desc.dwHeight,
+                                                 desc.dwWidth * 4, &payload_size))
+    {
+        total_size = sizeof(*header) + payload_size;
+        if (presenter->native_frame_size < total_size)
+        {
+            BYTE *frame = realloc(presenter->native_frame, (size_t)total_size);
+            if (frame)
+            {
+                presenter->native_frame = frame;
+                presenter->native_frame_size = (size_t)total_size;
+            }
+        }
+        if (presenter->native_frame_size >= total_size
+                && macdrv_video_copy_rows(presenter->native_frame + sizeof(*header),
+                        desc.lpSurface, desc.lPitch, desc.dwWidth, desc.dwHeight))
+        {
+            header = (struct macdrv_video_header *)presenter->native_frame;
+            memset(header, 0, sizeof(*header));
+            header->version = MACDRV_VIDEO_PROTOCOL_VERSION;
+            header->command = MACDRV_VIDEO_CMD_PRESENT;
+            header->token = (uint64_t)(ULONG_PTR)presenter;
+            header->width = desc.dwWidth;
+            header->height = desc.dwHeight;
+            header->stride = desc.dwWidth * 4;
+            ret = TRUE;
+        }
+    }
+
+    IDirectDrawSurface7_Unlock(surface, NULL);
+
+    if (!ret) return FALSE;
+    ret = FALSE;
+    if ((dc = GetDC(presenter->window)))
+    {
+        HWND root = GetAncestor(presenter->window, GA_ROOT);
+        if (root)
+        {
+            if (presenter->native_root && presenter->native_root != root)
+                /* The video window moved to a different root; drop the
+                 * surface on the old root before presenting to the new. */
+                vmr7_presenter_release_native(presenter);
+            ret = ExtEscape(dc, MACDRV_VIDEO_ESCAPE_ID, (INT)total_size,
+                    (const char *)presenter->native_frame, 0, NULL) > 0;
+            if (ret) presenter->native_root = root;
+        }
+        /* No root means a native success could never be released; skip the
+         * present so the caller releases any stale frame and falls back. */
+        ReleaseDC(presenter->window, dc);
+    }
+    return ret;
+}
+
+static BOOL vmr7_presenter_try_native(struct vmr7_presenter *presenter, IDirectDrawSurface7 *surface)
+{
+    /* Every failed native attempt must drop a stale native frame before
+     * the GDI fallback paints underneath it. */
+    if (vmr7_presenter_present_native(presenter, surface))
+        return TRUE;
+    vmr7_presenter_release_native(presenter);
+    return FALSE;
+}
+
 static HRESULT WINAPI image_presenter_StartPresenting(IVMRImagePresenter *iface, DWORD_PTR cookie)
 {
+    if (GetModuleHandleW(L"winemac.drv"))
+    {
+        TRACE("iface %p, cookie %#Ix.\n", iface, cookie);
+        return S_OK;
+    }
     FIXME("iface %p, cookie %#Ix, stub!\n", iface, cookie);
     return E_NOTIMPL;
 }
 
 static HRESULT WINAPI image_presenter_StopPresenting(IVMRImagePresenter *iface, DWORD_PTR cookie)
 {
+    struct vmr7_presenter *presenter = impl_from_IVMRImagePresenter(iface);
+
+    if (GetModuleHandleW(L"winemac.drv"))
+    {
+        TRACE("iface %p, cookie %#Ix.\n", iface, cookie);
+        vmr7_presenter_release_native(presenter);
+        return S_OK;
+    }
     FIXME("iface %p, cookie %#Ix, stub!\n", iface, cookie);
     return E_NOTIMPL;
 }
@@ -134,6 +281,9 @@ static HRESULT WINAPI image_presenter_PresentImage(IVMRImagePresenter *iface,
     {
         HDC source_dc, target_dc;
         DDSURFACEDESC2 desc = {.dwSize = sizeof(desc)};
+
+        if (vmr7_presenter_try_native(presenter, info->lpSurf))
+            return S_OK;
 
         if (SUCCEEDED(hr = IDirectDrawSurface7_GetSurfaceDesc(info->lpSurf, &desc))
                 && SUCCEEDED(hr = IDirectDrawSurface7_GetDC(info->lpSurf, &source_dc)))
@@ -323,6 +473,11 @@ static HRESULT WINAPI surface_allocator_FreeSurface(IVMRSurfaceAllocator *iface,
 
     TRACE("presenter %p, id %#Ix.\n", presenter, id);
 
+    vmr7_presenter_release_native(presenter);
+    free(presenter->native_frame);
+    presenter->native_frame = NULL;
+    presenter->native_frame_size = 0;
+
     if (presenter->frontbuffer)
     {
         IDirectDrawSurface7_Release(presenter->frontbuffer);
@@ -466,6 +621,8 @@ static HRESULT WINAPI windowless_control_SetVideoClippingWindow(
 
     if (GetModuleHandleW(L"winemac.drv"))
     {
+        if (window != presenter->window)
+            vmr7_presenter_release_native(presenter);
         presenter->window = window;
         return S_OK;
     }

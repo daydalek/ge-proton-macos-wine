@@ -84,6 +84,9 @@
     BOOL fakingClose;
 
     CAShapeLayer* contentViewMaskLayer;
+
+    /* VMR7 native video child windows, keyed by presenter token. */
+    NSMutableDictionary* videoSurfaces;
 }
 
 @property (retain, readonly, nonatomic) WineEventQueue* queue;
@@ -111,5 +114,16 @@
     - (void) updateForCursorClipping;
 
     - (void) setRetinaMode:(BOOL)mode;
+
+@end
+
+
+/* VMR7 native video presentation surfaces (implemented in cocoa_vmr7.h). */
+@interface WineWindow (WineVMR7VideoSurfaces)
+
+    - (BOOL) wine_presentVideoWithToken:(uint64_t)token image:(CGImageRef)image target:(CGRect)rect;
+    - (void) wine_clearVideoWithToken:(uint64_t)token;
+    - (void) wine_updateVideoSurfaces;
+    - (void) wine_clearVideoSurfaces;
 
 @end
