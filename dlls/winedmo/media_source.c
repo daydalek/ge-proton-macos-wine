@@ -347,6 +347,7 @@ struct media_source
     } demuxer_stream;
 
     HANDLE demux_thread;
+    DWORD demux_thread_id;
     bool demux_thread_shutdown;
     bool read_flushing;
     bool flushing;
@@ -734,7 +735,10 @@ static NTSTATUS CDECL source_stream_read_cb(struct winedmo_stream *stream, BYTE 
     bool known_size = source->file_size != (UINT64)-1;
     HRESULT hr;
 
-    if (source->read_flushing || source->demux_thread_shutdown)
+    /* Seeks issue demuxer-side reads (e.g. ASF index scans) on the seeking
+     * thread; the flush only aborts the demux thread's in-flight reads. */
+    if (source->demux_thread_shutdown
+            || (source->read_flushing && GetCurrentThreadId() == source->demux_thread_id))
     {
         *size = 0;
         return STATUS_SUCCESS;
@@ -2307,7 +2311,7 @@ static HRESULT media_source_create(struct object_context *context, IMFMediaSourc
     object->state = SOURCE_STOPPED;
 
     /* Start the background demux thread. */
-    object->demux_thread = CreateThread(NULL, 0, source_demux_thread, object, 0, NULL);
+    object->demux_thread = CreateThread(NULL, 0, source_demux_thread, object, 0, &object->demux_thread_id);
     if (!object->demux_thread)
     {
         hr = HRESULT_FROM_WIN32(GetLastError());
