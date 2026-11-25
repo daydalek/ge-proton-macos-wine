@@ -392,6 +392,10 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
     - (void) wine_getBackingSize:(int*)outBackingSize;
     - (void) wine_setBackingSize:(const int*)newBackingSize;
 
+    - (BOOL) wine_hasMetalDescendant;
+    - (BOOL) wine_sharesMetalPresentation;
+    - (void) wine_retireGDIUpscaling;
+    - (void) wine_retireGDIUpscalingInAncestors;
     - (WineMetalView*) newMetalViewWithDevice:(id<MTLDevice>)device;
 
 @end
@@ -537,7 +541,7 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
 
         _upscaleLayer.hidden = YES;
         [_gdiUpscaler hideTemporalPresentation];
-
+        if ([self wine_sharesMetalPresentation]) [self wine_retireGDIUpscaling];
 
         if ([window contentView] != self)
             return;
@@ -572,7 +576,7 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
             layer.contents = (id)image;
             /* The original surface keeps its Wine pixel coordinates. Only the
              * presentation sublayer receives a physical-resolution image. */
-            if (!_everHadGLContext && ![self hasGLDescendant] && !_metalView &&
+            if (!_everHadGLContext && ![self hasGLDescendant] && ![self wine_sharesMetalPresentation] &&
                 !shapeImage && !window.usePerPixelAlpha && [WineGDIUpscaler enabled])
             {
                 CGFloat sourceScale = layer.contentsScale;
@@ -768,16 +772,63 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
         }
     }
 
+    /* GDI layers can cover a Metal surface belonging to a child Wine view.
+     * Query the live tree rather than caching visibility or sibling ownership. */
+    - (BOOL) wine_hasMetalDescendant
+    {
+        if (_metalView) return YES;
+        NSMutableArray *pending = [NSMutableArray arrayWithArray:self.subviews];
+        while (pending.count)
+        {
+            NSView *view = [[[pending lastObject] retain] autorelease];
+            [pending removeLastObject];
+            if ([view isKindOfClass:[WineMetalView class]]) return YES;
+            [pending addObjectsFromArray:view.subviews];
+        }
+        return NO;
+    }
+
+    - (BOOL) wine_sharesMetalPresentation
+    {
+        for (NSView *view = self; view; view = view.superview)
+            if ([view isKindOfClass:[WineContentView class]] &&
+                [(WineContentView *)view wine_hasMetalDescendant]) return YES;
+        return NO;
+    }
+
+    - (void) wine_retireGDIUpscaling
+    {
+        /* Cancellation invalidates pending neural jobs and presentation timers.
+         * An old completion may request display; the live-tree gate rejects it. */
+        if (_gdiUpscaler || _upscaleLayer)
+            NSLog(@"Wine GDI upscaler: retiring GDI presentation for Metal view tree");
+        [_gdiUpscaler cancelTemporalPresentation];
+        [_gdiUpscaler release]; _gdiUpscaler = nil;
+        [_upscaleLayer removeFromSuperlayer];
+        [_upscaleLayer release]; _upscaleLayer = nil;
+        _upscaleUnavailable = NO;
+    }
+
+    - (void) wine_retireGDIUpscalingInAncestors
+    {
+        for (NSView *view = self; view; view = view.superview)
+            if ([view isKindOfClass:[WineContentView class]])
+            {
+                [(WineContentView *)view wine_retireGDIUpscaling];
+                [view setNeedsDisplay:YES];
+            }
+    }
+
     - (WineMetalView*) newMetalViewWithDevice:(id<MTLDevice>)device
     {
-        _upscaleLayer.hidden = YES;
+        [self wine_retireGDIUpscalingInAncestors];
         if (_metalView) return _metalView;
 
         WineMetalView* view = [[WineMetalView alloc] initWithFrame:[self bounds] device:device];
         [view setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
         [self setAutoresizesSubviews:YES];
-        [self addSubview:view positioned:NSWindowBelow relativeTo:nil];
         _metalView = view;
+        [self addSubview:view positioned:NSWindowBelow relativeTo:nil];
 
         [(WineWindow*)self.window windowDidDrawContent];
 
@@ -890,6 +941,10 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
                 [self invalidateHasGLDescendant];
         }
         [super didAddSubview:subview];
+        if ([subview isKindOfClass:[WineMetalView class]] ||
+            ([subview isKindOfClass:[WineContentView class]] &&
+             [(WineContentView *)subview wine_hasMetalDescendant]))
+            [self wine_retireGDIUpscalingInAncestors];
     }
 
     - (void) willRemoveSubview:(NSView*)subview
@@ -902,6 +957,10 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
         }
         if (subview == _metalView)
             _metalView = nil;
+        /* The next display pass observes the tree after the removal and may
+         * create fresh GDI assets when software presentation resumes. */
+        for (NSView *view = self; view; view = view.superview)
+            if ([view isKindOfClass:[WineContentView class]]) [view setNeedsDisplay:YES];
         [super willRemoveSubview:subview];
     }
 
