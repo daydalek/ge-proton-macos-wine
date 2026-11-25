@@ -1696,6 +1696,7 @@ NTSTATUS WINAPI wow64_NtUserCallHwndParam( UINT *args )
         }
 
     case NtUserCallHwndParam_GetClientRect:
+    case NtUserCallHwndParam_GetPresentRect:
         {
             struct
             {
