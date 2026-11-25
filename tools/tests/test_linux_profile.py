@@ -16,7 +16,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts/linux'))
-from build import patch_plan, sha256_file, incremental_additions
+from build import patch_plan, sha256_file, incremental_additions, extract_tar
 import verify as linux_verify
 from audio_fixture import PulseAudioFixture
 
@@ -164,6 +164,25 @@ int main(void) {
                 manifest.write_text(json.dumps(record))
                 with self.assertRaisesRegex(ValueError, 'source commit'):
                     package.validate_provenance(stage, source)
+
+    def test_locked_toolchain_relative_symlinks_extract_safely(self):
+        import io
+        import tarfile
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            archive = root / 'toolchain.tar.gz'
+            with tarfile.open(archive, 'w:gz') as tf:
+                include = tarfile.TarInfo('llvm-mingw-test/generic-w64-mingw32/include/stdio.h')
+                payload = b'/* header */'
+                include.size = len(payload)
+                tf.addfile(include, io.BytesIO(payload))
+                link = tarfile.TarInfo('llvm-mingw-test/aarch64-w64-mingw32/include')
+                link.type = tarfile.SYMTYPE
+                link.linkname = '../generic-w64-mingw32/include'
+                tf.addfile(link)
+            destination = root / 'out'
+            extract_tar(archive, destination)
+            self.assertTrue((destination / 'llvm-mingw-test/aarch64-w64-mingw32/include').is_symlink())
 
     def test_linux_packaging_removes_macos_steam_defaults(self):
         steam = 'HKCU,Software\\Wine\\AppDefaults\\steam.exe,"CommandLineAppend",2,"-allosarches -cef-force-32bit"\n'

@@ -90,9 +90,9 @@ def extract_tar(archive, destination, members=None):
         selected = tf.getmembers() if members is None else [
             m for m in tf.getmembers()
             if any(m.name == p or m.name.startswith(p.rstrip('/') + '/') for p in members)]
-        if hasattr(tarfile, 'data_filter'):
-            tf.extractall(destination, members=selected, filter='data')
-            return
+        # Python's data filter misclassifies llvm-mingw's relative symlink
+        # aarch64-w64-mingw32/include -> ../generic-w64-mingw32/include.
+        # Validate links ourselves, then use the less strict tar filter where available.
         for member in selected:
             target = (destination / member.name).resolve()
             if target != destination and destination not in target.parents:
@@ -104,7 +104,10 @@ def extract_tar(archive, destination, members=None):
                     raise SystemExit(f'Unsafe link in {archive}: {member.name}')
             if member.isdev():
                 raise SystemExit(f'Device node in {archive}: {member.name}')
-        tf.extractall(destination, members=selected)
+        if hasattr(tarfile, 'tar_filter'):
+            tf.extractall(destination, members=selected, filter='tar')
+        else:
+            tf.extractall(destination, members=selected)
 
 
 # ---------------------------------------------------------------- Mach-O ----
