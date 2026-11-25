@@ -1714,9 +1714,9 @@ void macdrv_WindowPosChanged(HWND hwnd, HWND insert_after, HWND owner_hint, UINT
         (thread_data->current_event->type != WINDOW_FRAME_CHANGED &&
          thread_data->current_event->type != WINDOW_DID_UNMINIMIZE))
     {
-        sync_window_position(data, swp_flags, &old_rects);
         if (data->cocoa_window)
             set_cocoa_window_properties(data);
+        sync_window_position(data, swp_flags, &old_rects);
     }
 
     if (new_style & WS_VISIBLE)

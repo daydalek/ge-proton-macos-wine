@@ -1333,6 +1333,7 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
         if (newStyle != currentStyle)
         {
             NSString* title = [[[self title] copy] autorelease];
+            NSRect contentRect = [self contentRectForFrameRect:self.wine_fractionalFrame];
             BOOL showingButtons = (currentStyle & (NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable)) != 0;
             BOOL shouldShowButtons = (newStyle & (NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable)) != 0;
             if (shouldShowButtons != showingButtons && !((newStyle ^ currentStyle) & NSWindowStyleMaskClosable))
@@ -1345,6 +1346,18 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
                 [self setStyleMask:newStyle ^ NSWindowStyleMaskClosable];
             }
             [self setStyleMask:newStyle];
+
+            if ((currentStyle ^ newStyle) & (NSWindowStyleMaskTitled | NSWindowStyleMaskUtilityWindow))
+            {
+                NSRect newFrame = [self frameRectForContentRect:contentRect];
+                if (!NSEqualRects(newFrame, self.wine_fractionalFrame))
+                {
+                    BOOL prevIgnore = ignore_windowResize;
+                    ignore_windowResize = TRUE;
+                    [self setFrameAndWineFrame:newFrame];
+                    ignore_windowResize = prevIgnore;
+                }
+            }
 
             BOOL isNonActivating = (currentStyle & NSWindowStyleMaskNonactivatingPanel) != 0;
             BOOL shouldBeNonActivating = (newStyle & NSWindowStyleMaskNonactivatingPanel) != 0;

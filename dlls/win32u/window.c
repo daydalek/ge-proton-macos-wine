@@ -1518,10 +1518,14 @@ static LONG_PTR set_window_long_internal( HWND hwnd, INT offset, UINT size,
                 win->dwStyle = newval;
                 win->dwExStyle = fix_exstyle(win->dwStyle, win->dwExStyle);
                 retval = reply->old_info;
+                if ((retval ^ newval) & (WS_CAPTION | WS_BORDER | WS_DLGFRAME | WS_THICKFRAME))
+                    win->flags |= WIN_STYLE_FRAME_CHANGED;
                 break;
             case GWL_EXSTYLE:
                 win->dwExStyle = newval;
                 retval = reply->old_info;
+                if ((retval ^ newval) & (WS_EX_DLGMODALFRAME | WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_STATICEDGE | WS_EX_TOOLWINDOW))
+                    win->flags |= WIN_STYLE_FRAME_CHANGED;
                 break;
             case GWLP_ID:
                 win->wIDmenu = newval;
@@ -4041,6 +4045,12 @@ BOOL set_window_pos( WINDOWPOS *winpos, int parent_x, int parent_y )
 
     /* Fix redundant flags */
     if (!fixup_swp_flags( winpos, &old_rects.window, parent_x, parent_y )) goto done;
+
+    if (!(orig_flags & SWP_NOSIZE) || (winpos->flags & SWP_FRAMECHANGED))
+    {
+        if (win_set_flags( winpos->hwnd, 0, WIN_STYLE_FRAME_CHANGED ) & WIN_STYLE_FRAME_CHANGED)
+            winpos->flags |= SWP_FRAMECHANGED;
+    }
 
     if((winpos->flags & (SWP_NOZORDER | SWP_HIDEWINDOW | SWP_SHOWWINDOW)) != SWP_NOZORDER)
     {
