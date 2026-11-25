@@ -32,7 +32,7 @@
 #import "cocoa_app.h"
 #import "cocoa_event.h"
 #import "cocoa_opengl.h"
-#import "cocoa_spatial.h"
+#import "cocoa_upscaler.h"
 #import "d3dmetal_objc.h" /* CW HACK 22435 */
 
 #pragma GCC diagnostic ignored "-Wdeclaration-after-statement"
@@ -376,9 +376,9 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
     int backingSize[2];
 
     WineMetalView *_metalView;
-    WineSpatialScaler *_spatialScaler;
-    CALayer *_spatialLayer;
-    BOOL _spatialUnavailable;
+    WineGDIUpscaler *_gdiUpscaler;
+    CALayer *_upscaleLayer;
+    BOOL _upscaleUnavailable;
 
 @public void *d3dmetal_client_surface;   /* CW HACK 22435 */
 }
@@ -506,9 +506,9 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
         [pendingGlContexts release];
         CGImageRelease(colorImage);
         CGImageRelease(shapeImage);
-        [_spatialLayer removeFromSuperlayer];
-        [_spatialLayer release];
-        [_spatialScaler release];
+        [_upscaleLayer removeFromSuperlayer];
+        [_upscaleLayer release];
+        [_gdiUpscaler release];
         [super dealloc];
     }
 
@@ -525,7 +525,7 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
     - (void) viewDidChangeBackingProperties
     {
         [super viewDidChangeBackingProperties];
-        if ([WineSpatialScaler enabled]) [self setNeedsDisplay:YES];
+        if ([WineGDIUpscaler enabled]) [self setNeedsDisplay:YES];
     }
 
     - (void) updateLayer
@@ -535,7 +535,9 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
         CGRect imageRect;
         CALayer* layer = [self layer];
 
-        _spatialLayer.hidden = YES;
+        _upscaleLayer.hidden = YES;
+        [_gdiUpscaler hideTemporalPresentation];
+
 
         if ([window contentView] != self)
             return;
@@ -571,44 +573,53 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
             /* The original surface keeps its Wine pixel coordinates. Only the
              * presentation sublayer receives a physical-resolution image. */
             if (!_everHadGLContext && ![self hasGLDescendant] && !_metalView &&
-                !shapeImage && !window.usePerPixelAlpha && [WineSpatialScaler enabled])
+                !shapeImage && !window.usePerPixelAlpha && [WineGDIUpscaler enabled])
             {
                 CGFloat sourceScale = layer.contentsScale;
-                CGRect target = CGRectMake(0, 0, CGImageGetWidth(image) / sourceScale,
-                                                CGImageGetHeight(image) / sourceScale);
-                if (!CGRectIsEmpty(window.fullscreenContentRect))
-                {
-                    target.origin.x = (layer.bounds.size.width - target.size.width) / 2;
-                    target.origin.y = (layer.bounds.size.height - target.size.height) / 2;
-                }
+                BOOL fullscreenPresentation = window.fullscreen ||
+                    !CGRectIsEmpty(window.fullscreenContentRect) ||
+                    (window.styleMask & NSWindowStyleMaskFullScreen);
+                CGRect target = wgdi_presentation_frame(CGImageGetWidth(image),
+                    CGImageGetHeight(image), sourceScale, fullscreenPresentation,
+                    window.fullscreenContentRect, layer.bounds);
                 CGRect physical = [self convertRectToBacking:NSRectFromCGRect(target)];
                 NSUInteger width = (NSUInteger)floor(physical.size.width);
                 NSUInteger height = (NSUInteger)floor(physical.size.height);
                 if (width > CGImageGetWidth(image) && height > CGImageGetHeight(image))
                 {
-                    if (!_spatialScaler && !_spatialUnavailable)
+                    if (!_gdiUpscaler && !_upscaleUnavailable)
                     {
-                        _spatialScaler = [[WineSpatialScaler alloc] init];
-                        _spatialUnavailable = !_spatialScaler;
+                        _gdiUpscaler = [[WineGDIUpscaler alloc] init];
+                        _upscaleUnavailable = !_gdiUpscaler;
                     }
-                    CGImageRef scaled = [_spatialScaler copyScaledImage:image width:width height:height];
-                    if (scaled)
+                    [_gdiUpscaler setPresentationView:self];
+                    [_gdiUpscaler offerRegionSelectionForImage:image
+                                                   needsDisplay:^{ [self setNeedsDisplay:YES]; }];
+                    BOOL temporalPresented = [_gdiUpscaler presentImage:image inLayer:layer frame:target
+                        width:width height:height needsDisplay:^{ [self setNeedsDisplay:YES]; }];
+                    if (!temporalPresented)
                     {
-                        if (!_spatialLayer)
+                        CGImageRef scaled = [_gdiUpscaler copyScaledImage:image width:width height:height
+                            needsDisplay:^{ [self setNeedsDisplay:YES]; }];
+                        if (scaled)
                         {
-                            _spatialLayer = [[CALayer alloc] init];
-                            _spatialLayer.actions = @{ @"contents": [NSNull null], @"bounds": [NSNull null],
-                                @"position": [NSNull null], @"hidden": [NSNull null] };
-                            _spatialLayer.contentsGravity = kCAGravityResize;
-                            _spatialLayer.opaque = YES;
-                            [layer addSublayer:_spatialLayer];
+                            if (!_upscaleLayer)
+                            {
+                                _upscaleLayer = [[CALayer alloc] init];
+                                _upscaleLayer.actions = @{ @"contents": [NSNull null], @"bounds": [NSNull null],
+                                    @"position": [NSNull null], @"hidden": [NSNull null] };
+                                _upscaleLayer.contentsGravity = kCAGravityResize;
+                                _upscaleLayer.opaque = YES;
+                                [layer addSublayer:_upscaleLayer];
+                            }
+                            _upscaleLayer.frame = target;
+                            _upscaleLayer.contentsScale = width / target.size.width;
+                            _upscaleLayer.contents = (id)scaled;
+                            _upscaleLayer.hidden = NO;
+                            CGImageRelease(scaled);
                         }
-                        _spatialLayer.frame = target;
-                        _spatialLayer.contentsScale = width / target.size.width;
-                        _spatialLayer.contents = (id)scaled;
-                        _spatialLayer.hidden = NO;
-                        CGImageRelease(scaled);
                     }
+
                 }
             }
             CFRelease(image);
@@ -662,7 +673,7 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
 
     - (void) addGLContext:(WineOpenGLContext*)context
     {
-        _spatialLayer.hidden = YES;
+        _upscaleLayer.hidden = YES;
         BOOL hadContext = _everHadGLContext;
         if (!glContexts)
             glContexts = [[NSMutableArray alloc] init];
@@ -759,7 +770,7 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
 
     - (WineMetalView*) newMetalViewWithDevice:(id<MTLDevice>)device
     {
-        _spatialLayer.hidden = YES;
+        _upscaleLayer.hidden = YES;
         if (_metalView) return _metalView;
 
         WineMetalView* view = [[WineMetalView alloc] initWithFrame:[self bounds] device:device];

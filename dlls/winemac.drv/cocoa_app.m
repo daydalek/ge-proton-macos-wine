@@ -20,6 +20,7 @@
 
 #import "cocoa_app.h"
 #import "cocoa_cursorclipping.h"
+#import "cocoa_upscaler.h"
 #import "cocoa_event.h"
 #import "cocoa_window.h"
 #import "cocoa_icon_utils.h"
@@ -53,6 +54,9 @@ static NSString* const WineExternalQuitNotificationExeNameKey = @"ExeName";
 static NSString* const WineExternalQuitNotificationSourcePIDKey = @"SourcePID";
 static NSString* const WineExternalQuitNotificationWineConfigDirKey = @"WineConfigDir";
 static NSString* const WineExternalQuitNotificationWinePrefixKey = @"WinePrefix";
+
+static BOOL regionPickerClipSuspended;
+static CGRect regionPickerPendingClip;
 
 bool macdrv_err_on;
 
@@ -1263,6 +1267,9 @@ static NSString* WineLocalizedString(unsigned int stringID)
     {
         BOOL ret;
 
+        if (wine_gdi_region_picker_is_active())
+            return TRUE;
+
         if ([windowsBeingDragged count])
             ret = FALSE;
         else if (self.clippingCursor && [clipCursorHandler respondsToSelector:@selector(setCursorPosition:)])
@@ -1328,6 +1335,13 @@ static NSString* WineLocalizedString(unsigned int stringID)
 
     - (BOOL) startClippingCursor:(CGRect)rect
     {
+        if (wine_gdi_region_picker_is_active())
+        {
+            regionPickerPendingClip = rect;
+            regionPickerClipSuspended = YES;
+            return TRUE;
+        }
+
         if (!clipCursorHandler) {
             if (use_confinement_cursor_clipping && [WineConfinementClipCursorHandler isAvailable])
                 clipCursorHandler = [[WineConfinementClipCursorHandler alloc] init];
@@ -1350,6 +1364,8 @@ static NSString* WineLocalizedString(unsigned int stringID)
 
     - (BOOL) stopClippingCursor
     {
+        regionPickerClipSuspended = NO;
+
         if (!self.clippingCursor)
             return TRUE;
 
@@ -1366,6 +1382,28 @@ static NSString* WineLocalizedString(unsigned int stringID)
     - (BOOL) clippingCursor
     {
         return clipCursorHandler.clippingCursor;
+    }
+
+    - (void) suspendClippingForRegionPicker
+    {
+        if (self.clippingCursor)
+        {
+            CGRect pending = clipCursorHandler.cursorClipRect;
+            [self stopClippingCursor];
+            regionPickerPendingClip = pending;
+            regionPickerClipSuspended = YES;
+        }
+    }
+
+    - (void) resumeClippingForRegionPicker:(BOOL)ownerVisible
+    {
+        if (regionPickerClipSuspended && ownerVisible)
+        {
+            regionPickerClipSuspended = NO;
+            [self startClippingCursor:regionPickerPendingClip];
+        }
+        else
+            regionPickerClipSuspended = NO;
     }
 
     - (BOOL) isKeyPressed:(uint16_t)keyCode
@@ -1898,6 +1936,22 @@ static NSString* WineLocalizedString(unsigned int stringID)
     {
         BOOL ret = FALSE;
         NSEventType type = [anEvent type];
+
+        if (wine_gdi_region_picker_is_window(anEvent.window))
+            return FALSE;
+        if (wine_gdi_region_picker_blocks_window(anEvent.window))
+            switch (type)
+            {
+                case NSEventTypeMouseMoved: case NSEventTypeLeftMouseDragged:
+                case NSEventTypeRightMouseDragged: case NSEventTypeOtherMouseDragged:
+                case NSEventTypeLeftMouseDown: case NSEventTypeLeftMouseUp:
+                case NSEventTypeRightMouseDown: case NSEventTypeRightMouseUp:
+                case NSEventTypeOtherMouseDown: case NSEventTypeOtherMouseUp:
+                case NSEventTypeScrollWheel: case NSEventTypeKeyDown: case NSEventTypeKeyUp:
+                    return TRUE;
+                default:
+                    break;
+            }
 
         if (type == NSEventTypeFlagsChanged)
             self.lastFlagsChanged = anEvent;
