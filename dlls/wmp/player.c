@@ -16,6 +16,8 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#include <math.h>
+
 #include "wmp_private.h"
 
 #include "wine/debug.h"
@@ -1306,12 +1308,15 @@ static HRESULT WINAPI WMPSettings_put_volume(IWMPSettings *iface, LONG v)
 {
     WindowsMediaPlayer *This = impl_from_IWMPSettings(iface);
     TRACE("(%p)->(%ld)\n", This, v);
+    if (v < 0 || v > 100)
+        return E_INVALIDARG;
     This->volume = v;
     if (!This->filter_graph)
         return S_OK;
 
-    /* IBasicAudio -   [-10000, 0], wmp - [0, 100] */
-    v = 10000 * v / 100 - 10000;
+    /* IBasicAudio uses hundredths of a decibel; WMP exposes a percentage.
+     * Convert the amplitude ratio logarithmically so low settings remain audible. */
+    v = v ? 2000.0 * log10(v / 100.0) : -10000;
     if (!This->basic_audio)
         return S_FALSE;
 
