@@ -1400,6 +1400,22 @@ NTSTATUS transform_get_output( void *arg )
                 return STATUS_SUCCESS;
             }
         }
+
+        /* Decoders may output the coded size (e.g. 1088 for 1080 H.264) while
+         * the negotiated output type only carries the visible size. Signal a
+         * format change once so the caller picks up the coded-size type with
+         * the visible apertures; out_width/out_height track what was announced
+         * to avoid signalling repeatedly. */
+        if (!t->is_raw_video && t->out_width > 0 && t->out_height > 0
+                && should_use_coded_video_output_size( t, width, height )
+                && (t->out_width != t->avctx->coded_width || t->out_height != t->avctx->coded_height))
+        {
+            t->out_width = t->avctx->coded_width;
+            t->out_height = t->avctx->coded_height;
+            params->flags |= WINEDMO_SAMPLE_FLAG_FORMAT_CHANGED;
+            params->size   = 0;
+            return STATUS_SUCCESS; /* frame_pending stays true */
+        }
     }
 
     /* ---- Output the frame ---- */
