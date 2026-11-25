@@ -1,3 +1,4 @@
+/* GE Wine Linux modification notice: 2026-11-02; Linux integration and platform adaptations. Original copyright and license retained. See LINUX_MODIFICATIONS.json. */
 /* GE macOS Wine PoC modification notice: 2026-11-24; GE media integration and macOS adaptations. Original copyright and license retained. See MODIFICATIONS.json. */
 /*              DirectShow FilterGraph object (QUARTZ.DLL)
  *
@@ -2769,6 +2770,8 @@ static HRESULT WINAPI MediaSeeking_SetPositions(IMediaSeeking *iface, LONGLONG *
     HRESULT hr = E_NOTIMPL, filter_hr;
     struct filter *filter;
     FILTER_STATE state;
+    BOOL positioning = (current_flags & AM_SEEKING_PositioningBitsMask)
+            || (stop_flags & AM_SEEKING_PositioningBitsMask);
 
     TRACE("graph %p, current %s, current_flags %#lx, stop %s, stop_flags %#lx.\n", graph,
             current_ptr ? wine_dbgstr_longlong(*current_ptr) : "<null>", current_flags,
@@ -2790,8 +2793,9 @@ static HRESULT WINAPI MediaSeeking_SetPositions(IMediaSeeking *iface, LONGLONG *
 
     EnterCriticalSection(&graph->cs);
 
+    /* No-position requests still forward ReturnTime, while retaining filter state. */
     state = graph->state;
-    if (state == State_Running && !graph->needs_async_run)
+    if (positioning && state == State_Running && !graph->needs_async_run)
         IMediaControl_Pause(&graph->IMediaControl_iface);
 
     LIST_FOR_EACH_ENTRY(filter, &graph->filters, struct filter, entry)
@@ -2812,7 +2816,9 @@ static HRESULT WINAPI MediaSeeking_SetPositions(IMediaSeeking *iface, LONGLONG *
                 *current_ptr = current;
             if (stop_ptr && (stop_flags & AM_SEEKING_ReturnTime))
                 *stop_ptr = stop;
-            graph->current_pos = current;
+            /* Keep the graph clock snapshot for no-position requests. */
+            if ((current_flags & 0x7) != AM_SEEKING_NoPositioning)
+                graph->current_pos = current;
         }
         else if (filter_hr != E_NOTIMPL)
         {
@@ -2827,7 +2833,7 @@ static HRESULT WINAPI MediaSeeking_SetPositions(IMediaSeeking *iface, LONGLONG *
         graph->stream_elapsed = 0;
     }
 
-    if (state == State_Running && !graph->needs_async_run)
+    if (positioning && state == State_Running && !graph->needs_async_run)
         IMediaControl_Run(&graph->IMediaControl_iface);
 
     LeaveCriticalSection(&graph->cs);
@@ -5486,7 +5492,8 @@ static HRESULT WINAPI MediaFilter_Pause(IMediaFilter *iface)
         REFERENCE_TIME time;
         IReferenceClock_GetTime(graph->refClock, &time);
         graph->stream_elapsed += time - graph->stream_start;
-        graph->current_pos += graph->stream_elapsed;
+        /* stream_elapsed includes prior Run intervals; add this interval once. */
+        graph->current_pos += time - graph->stream_start;
     }
 
     LIST_FOR_EACH_ENTRY(filter, &graph->filters, struct filter, entry)

@@ -8,7 +8,7 @@
       "file": ".gitignore",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [],
-      "sha256": "15102310a94504f6ca69af5d961d70bf6269c7f76c0f904ea0dab603e43181b4"
+      "sha256": "9667cc393e7e39c1b50a101e2ce04179d12a3edfb726d8d9b5689f7748c8b0f7"
     },
     {
       "file": "MAINTAINERS",
@@ -55,9 +55,9 @@
         "Copyright 1997-2000 Marcus Meissner",
         "Copyright 1998-2000 Lionel Ulmer",
         "Copyright 2000-2001 TransGaming Technologies Inc.",
-        "Copyright 2006 Stefan Dösinger",
+        "Copyright 2006 Stefan D\u00f6singer",
         "Copyright 2008 Denver Gingerich",
-        "Copyright 2007-2008, 2011, 2013 Stefan Dösinger for CodeWeavers"
+        "Copyright 2007-2008, 2011, 2013 Stefan D\u00f6singer for CodeWeavers"
       ],
       "sha256": "4cc6b34fdff25c09fa0c2091a856eedab96f21789fdb09c11e6ef242baad08cc"
     },
@@ -65,7 +65,7 @@
       "file": "dlls/ddraw/ddraw_private.h",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2006 Stefan Dösinger"
+        "Copyright 2006 Stefan D\u00f6singer"
       ],
       "sha256": "0100acdb75f99bbb7662597c9e042c7d92041da8df69dc6d2fd33d441daa03a6"
     },
@@ -76,7 +76,7 @@
         "Copyright 1997-1999 Marcus Meissner",
         "Copyright 1998 Lionel Ulmer",
         "Copyright 2000-2001 TransGaming Technologies Inc.",
-        "Copyright 2006 Stefan Dösinger",
+        "Copyright 2006 Stefan D\u00f6singer",
         "Copyright 2008 Denver Gingerich"
       ],
       "sha256": "f51933e7fd35dcbd588704d655f87331178323fa8018f28f1b2c6c41d40142dd"
@@ -88,8 +88,8 @@
         "Copyright (c) 1997-2000 Marcus Meissner",
         "Copyright (c) 1998-2000 Lionel Ulmer",
         "Copyright (c) 2000-2001 TransGaming Technologies Inc.",
-        "Copyright (c) 2006 Stefan Dösinger",
-        "Copyright (c) 2011 Ričardas Barkauskas for CodeWeavers"
+        "Copyright (c) 2006 Stefan D\u00f6singer",
+        "Copyright (c) 2011 Ri\u010dardas Barkauskas for CodeWeavers"
       ],
       "sha256": "af1fd12241dea64df77cfa1320acbf98cb0bc7a97fcce91a3481346669b5a734"
     },
@@ -340,7 +340,7 @@
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
         "Copyright 2017 Nikolay Sivov",
-        "Copyright 2022 Rémi Bernon for CodeWeavers"
+        "Copyright 2022 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "54b9d7bb5c6a897b5ce990f3ea2f3ebe8647c3e5a8bd95b2cc3029a471370036"
     },
@@ -404,7 +404,7 @@
       "file": "dlls/mfplat/tests/mfplat.c",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2015 Michael Müller"
+        "Copyright 2015 Michael M\u00fcller"
       ],
       "sha256": "062c78ca3f20d4d69c49b20bd7eaf37020d9f6b38b9124fa602bd1a3cd6db2ec"
     },
@@ -420,7 +420,7 @@
       "file": "dlls/mfsrcsnk/media_source.c",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2024 Rémi Bernon for CodeWeavers"
+        "Copyright 2024 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "aae50919dc40a71bfbe0a59ac970fcfc5f077abf25f7d9cd425cf486f9bebd8f"
     },
@@ -428,7 +428,7 @@
       "file": "dlls/msauddecmft/msauddecmft.c",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2024 Rémi Bernon for CodeWeavers"
+        "Copyright 2024 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "ae941dcef27c01829a2e4fd11e9e405a623b6d284cb6d31b62411f2125b2b160"
     },
@@ -442,7 +442,7 @@
       "file": "dlls/msmpeg2vdec/msmpeg2vdec.c",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2024 Rémi Bernon for CodeWeavers"
+        "Copyright 2024 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "07544d0b5490492ea27b3d9106ad83daf147715128613c8379fd2606e1ce6bd2"
     },
@@ -450,7 +450,7 @@
       "file": "dlls/msmpeg2vdec/msmpeg2vdec.idl",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2024 Rémi Bernon for CodeWeavers"
+        "Copyright 2024 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "1dd7532042b5c0b4c9c91dc11327534238df334c189c92f72eb90843493d0595"
     },
@@ -468,7 +468,7 @@
       "original_copyright_notices": [
         "Copyright 2020 Jactry Zeng for CodeWeavers"
       ],
-      "sha256": "ec8bffd6818bd75750fd14e5282a2ea14a29b55a5526f5127f2411e151daa2ba"
+      "sha256": "8899674e5a5c4c7d82064e4262fd91462a0f25429f653953660df502855ee8b1"
     },
     {
       "file": "dlls/qasf/dmowrapper.c",
@@ -532,7 +532,7 @@
         "Copyright 2002 Lionel Ulmer",
         "Copyright 2004 Christian Costa"
       ],
-      "sha256": "bbd874ddfbe263d4195f1715458859a20725cf5171027eede4cd0608db7977a3"
+      "sha256": "f5b769505c67f7205c67e44d0689d2b7e24d1c01d8dc2de9fd3b371277935fca"
     },
     {
       "file": "dlls/quartz/main.c",
@@ -687,7 +687,7 @@
         "Copyright 1993 Martin Ayotte",
         "Copyright 1994 Alexandre Julliard",
         "Copyright 1997 Morten Welinder",
-        "Copyright 2005 Maxime Bellengé",
+        "Copyright 2005 Maxime Belleng\u00e9",
         "Copyright 2006 Phil Krylov"
       ],
       "sha256": "9b284040ad8258bd595bcf1957504aafd976257fd1cb629ebb1db10305256a36"
@@ -696,7 +696,7 @@
       "file": "dlls/vidreszr/vidreszr.c",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2024 Rémi Bernon for CodeWeavers"
+        "Copyright 2024 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "e900dff56b259b109ff93f66b5df0fafd466c743b545bd835abfe313bb946b01"
     },
@@ -739,7 +739,7 @@
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
         "Copyright 2012 Alexandre Julliard",
-        "Copyright 2025 Rémi Bernon for CodeWeavers"
+        "Copyright 2025 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "53b959ee0d4338fbf3985dc38dc6b412271af6bfef4e0b8f9905b04de17ab298"
     },
@@ -787,7 +787,7 @@
       "file": "dlls/winedmo/audio_decoder.c",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2022 Rémi Bernon for CodeWeavers"
+        "Copyright 2022 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "e9a718bd04068cc076310b0f5fc4176b1ca9c0165cd9f4bc2ee02e51a26aa491"
     },
@@ -795,7 +795,7 @@
       "file": "dlls/winedmo/color_convert.c",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2022 Rémi Bernon for CodeWeavers"
+        "Copyright 2022 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "46991caae33b5260d6c07217746651b4b5c7dde4d0d5e1f8433490ce7fc0743b"
     },
@@ -813,7 +813,7 @@
       "original_copyright_notices": [
         "Copyright 2002 Lionel Ulmer",
         "Copyright 2010 Aric Stewart, CodeWeavers",
-        "Copyright 2024 Rémi Bernon for CodeWeavers"
+        "Copyright 2024 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "b9a57bb61119d730a734072c3d126d0996f4d108409ce7e26e57559b1eea488c"
     },
@@ -906,7 +906,7 @@
       "file": "dlls/winedmo/resampler.c",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2022 Rémi Bernon for CodeWeavers"
+        "Copyright 2022 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "ce08e74f618535d4de341a9d6e75c1de142f7edb73e38f652cf777a477c33c58"
     },
@@ -920,7 +920,7 @@
       "file": "dlls/winedmo/unix_demuxer.c",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2024 Rémi Bernon for CodeWeavers"
+        "Copyright 2024 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "8f5f128c53f47390923b54dca9d0ea9d05044943679176ee8bc3f8656e017adb"
     },
@@ -928,7 +928,7 @@
       "file": "dlls/winedmo/unix_demuxer_mediaconv.c",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2024 Rémi Bernon for CodeWeavers"
+        "Copyright 2024 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "e98d3c59d38a017336a77e61b1f4784a9feec13e8bead2b0c9d5056f27247305"
     },
@@ -936,7 +936,7 @@
       "file": "dlls/winedmo/unix_media_type.c",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2024 Rémi Bernon for CodeWeavers"
+        "Copyright 2024 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "9f6f27e779268cda6049f30c00238a47dc8e07f1e74c2230e224f5ec32c2a0bb"
     },
@@ -952,7 +952,7 @@
       "file": "dlls/winedmo/unix_private.h",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2024 Rémi Bernon for CodeWeavers"
+        "Copyright 2024 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "24a3ae6c0bb98b57edcb77aab23712fb74769535fde4dd43f501b378efffc706"
     },
@@ -961,7 +961,7 @@
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
         "Copyright 2024 GloriousEggroll",
-        "Copyright 2022 Rémi Bernon for CodeWeavers"
+        "Copyright 2022 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "f6933ca3956f6e566c64dd0b2a36804361e0ccc5133a4a5e92eb9aaaec85f794"
     },
@@ -969,7 +969,7 @@
       "file": "dlls/winedmo/unixlib.c",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2024 Rémi Bernon for CodeWeavers"
+        "Copyright 2024 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "a2272da3b7ed2a248370dcdd2ef6940f1efeda93482af26024ce987556e98a51"
     },
@@ -977,7 +977,7 @@
       "file": "dlls/winedmo/unixlib.h",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2024 Rémi Bernon for CodeWeavers"
+        "Copyright 2024 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "2df7ee95be6b441f1fb894fee456d7a7257489deae2110f7c829f303b63ebbb7"
     },
@@ -985,7 +985,7 @@
       "file": "dlls/winedmo/video_decoder.c",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2022 Rémi Bernon for CodeWeavers",
+        "Copyright 2022 R\u00e9mi Bernon for CodeWeavers",
         "Copyright 2023 Shaun Ren for CodeWeavers"
       ],
       "sha256": "fdb24072a18d1d2da04ca11a1ac075b2324019ab9a8bc9dd2ae0e077a22203c2"
@@ -1002,7 +1002,7 @@
       "file": "dlls/winedmo/video_processor.c",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2022 Rémi Bernon for CodeWeavers"
+        "Copyright 2022 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "dfce75bf22d28e64cb0b528aef103684444362bb87e67db1c9031a2ec5ab2dcd"
     },
@@ -1053,7 +1053,7 @@
         "Copyright 2010 Aric Stewart for CodeWeavers",
         "Copyright 2019-2020 Zebediah Figura"
       ],
-      "sha256": "7f3d107661f5315699a8861d1e4a72f6b8af0492f3f6259a9568cdb1e3b511e7"
+      "sha256": "e8e8fcab1a6ffd95e575881af6102d4cde7482932a5e6e8fa7b0771fa5bb5285"
     },
     {
       "file": "dlls/winedmo/wm_reader.c",
@@ -1067,7 +1067,7 @@
       "file": "dlls/winedmo/wma_decoder.c",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2022 Rémi Bernon for CodeWeavers"
+        "Copyright 2022 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "03efff9090b5442c213d346517b136698d3e3f59a3cc04545589e5098acefcaf"
     },
@@ -1277,7 +1277,7 @@
         "Copyright 2011 Andrew Eikum for CodeWeavers",
         "Copyright 2022 Huw Davies"
       ],
-      "sha256": "f89a713997d1eb88d8189fab1127ac6660a2a79efc476e898305007e046239da"
+      "sha256": "b9b25079ab5583b84c550c729ce0d087a39c6fff4b6ca18b0c6e7de6f9da77cf"
     },
     {
       "file": "dlls/winmm/waveform.c",
@@ -1297,7 +1297,7 @@
       "file": "dlls/wmadmod/wmadmod.c",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2024 Rémi Bernon for CodeWeavers"
+        "Copyright 2024 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "eebf639f92517c339688da94dfc358d95644d33a9a5f157f3d391eec50410ab1"
     },
@@ -1382,7 +1382,7 @@
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
         "Copyright (C) 2002 Alexandre Julliard",
-        "Copyright (C) 2004 Vincent Béron"
+        "Copyright (C) 2004 Vincent B\u00e9ron"
       ],
       "sha256": "43fa38903652cb15e171d6facd196a21ed96660d292b41de6e4610f38c57f869"
     },
@@ -1420,7 +1420,7 @@
       "file": "include/wine/winedmo.h",
       "modification_date": "2026-11-24",
       "original_copyright_notices": [
-        "Copyright 2024 Rémi Bernon for CodeWeavers"
+        "Copyright 2024 R\u00e9mi Bernon for CodeWeavers"
       ],
       "sha256": "c7bda53f65169a600cb43c76d3dbdc5cd512ee17794e39ba7da42fcf75c5cacb"
     },
@@ -1475,7 +1475,7 @@
         "Copyright (C) 1995,96,97,98,99,2000,2001,2002 Free Software Foundation, Inc.",
         "Copyright (C) 2004 Mike McCormack for CodeWeavers",
         "Copyright (C) 2004 Alexandre Julliard",
-        "Copyright (C) 2017 Michael Müller",
+        "Copyright (C) 2017 Michael M\u00fcller",
         "Copyright (C) 2017 Sebastian Lackner"
       ],
       "sha256": "a58bec99c514080035f5bcdf36d670ecede517dcec161904f4daaee2811af995"

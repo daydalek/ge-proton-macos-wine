@@ -1,3 +1,4 @@
+/* GE Wine Linux modification notice: 2026-11-02; Linux integration and platform adaptations. Original copyright and license retained. See LINUX_MODIFICATIONS.json. */
 /* GE macOS Wine PoC modification notice: 2026-11-24; GE media integration and macOS adaptations. Original copyright and license retained. See MODIFICATIONS.json. */
 /*
  * Copyright 2011-2012 Maarten Lankhorst
@@ -489,9 +490,15 @@ static void silence_buffer(pa_sample_format_t format, BYTE *buffer, UINT32 bytes
     memset(buffer, format == PA_SAMPLE_U8 ? 0x80 : 0, bytes);
 }
 
+/* The CrossOver stream model uses PulseAudio-backed streams. */
+static BOOL pulse_stream_ready(struct pulse_stream *stream)
+{
+    return stream->stream && pa_stream_get_state(stream->stream) == PA_STREAM_READY;
+}
+
 static BOOL pulse_stream_valid(struct pulse_stream *stream)
 {
-    return pa_stream_get_state(stream->stream) == PA_STREAM_READY;
+    return pulse_stream_ready(stream);
 }
 
 static HRESULT pulse_connect(const char *name)
@@ -1912,18 +1919,18 @@ static void pa_streams_timer_cb(pa_mainloop_api *api, pa_time_event *e, const st
                 stream->timeline_start_period_time = 0;
                 stream->timeline_start_stream_time = 0;
             }
-            if (!pulse_stream_haptic(stream) && !pulse_stream_ready(stream))
+            if (!pulse_stream_ready(stream))
                 continue;
-            if (!pulse_stream_haptic(stream) && !stream->update_timing_info_pending && (o = pa_stream_update_timing_info(stream->stream, pulse_update_timing_cb, stream)))
+            if (!stream->update_timing_info_pending && (o = pa_stream_update_timing_info(stream->stream, pulse_update_timing_cb, stream)))
             {
                 pa_operation_unref(o);
                 stream->update_timing_info_pending = TRUE;
             }
-            else if (!pulse_stream_haptic(stream) && stream->update_timing_info_pending)
+            else if (stream->update_timing_info_pending)
             {
                 TRACE("pa_stream_update_timing_info is still pending.\n");
             }
-            else if (!pulse_stream_haptic(stream))
+            else
             {
                 ERR("pa_stream_update_timing_info err %d.\n", pa_context_errno(pulse_ctx));
             }

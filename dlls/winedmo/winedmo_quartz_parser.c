@@ -1,3 +1,4 @@
+/* GE Wine Linux modification notice: 2026-11-02; Linux integration and platform adaptations. Original copyright and license retained. See LINUX_MODIFICATIONS.json. */
 /* GE macOS Wine PoC modification notice: 2026-11-24; GE media integration and macOS adaptations. Original copyright and license retained. See MODIFICATIONS.json. */
 /*
  * DirectShow parser filters backed by winedmo (ffmpeg) demuxer
@@ -1672,37 +1673,7 @@ static HRESULT dmo_parser_start_stream(struct strmbase_filter *iface, REFERENCE_
 
 static HRESULT dmo_parser_stop_stream(struct strmbase_filter *iface)
 {
-    struct dmo_parser *filter = dmo_impl_from_strmbase_filter(iface);
-    unsigned int i;
-
-    if (!filter->sink_connected)
-        return S_OK;
-
-    EnterCriticalSection(&filter->streaming_cs);
-    filter->flushing = true;
-    filter->read_flushing = TRUE;
-    ++filter->read_flush_generation;
-    LeaveCriticalSection(&filter->streaming_cs);
-
-    dmo_parser_begin_downstream_flush(filter);
-    WakeAllConditionVariable(&filter->flushing_cv);
-
-    for (i = 0; i < filter->source_count; ++i)
-    {
-        WakeConditionVariable(&filter->sources[i]->queue_cv);
-        WakeConditionVariable(&filter->sources[i]->queue_space_cv);
-    }
-
-    for (i = 0; i < filter->source_count; ++i)
-    {
-        struct dmo_parser_source *pin = filter->sources[i];
-
-        if (!dmo_parser_source_is_active(pin))
-            continue;
-        EnterCriticalSection(&pin->flushing_cs);
-        LeaveCriticalSection(&pin->flushing_cs);
-    }
-
+    /* Pause preserves queued data; cleanup_stream handles actual Stop. */
     return S_OK;
 }
 

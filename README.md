@@ -1,3 +1,73 @@
+# ge-proton-macos-wine
+
+`ge-proton-macos-wine` is the maintained full-source Wine tree used to build the
+Maltoria macOS and Linux Wine runtimes. It succeeds the patch-only maintenance
+layout in `daydalek/ge-proton-macos-wine-poc`.
+
+## Repository layout
+
+The repository root is the Wine source tree. It is based on the exact
+CrossOver 26.3.0 `sources/wine` tree recorded in
+`configs/crossover-source-lock.json`; downstream compatibility, media, macOS,
+and Linux changes are normal commits in this repository rather than patches
+applied at build time.
+
+Project-owned build and release infrastructure is kept in these top-level
+directories:
+
+- `scripts/` — macOS/Linux build, packaging, validation, and release tooling.
+- `configs/` — pinned source/dependency inputs and migration audit metadata.
+- `native/` — native GDI upscaler integration.
+- `tools/probes/` and `tools/tests/` — runtime probes and source tests.
+- `licenses/` — third-party license texts used by release packaging.
+
+The `patches/` directory is frozen migration evidence from the old patch-based
+repository. Builds must not apply it. It is retained temporarily because the
+source-license inventory and migration-audit tests use it to establish the
+provenance of commits already present in this tree.
+
+## Branch model
+
+- `vendor/crossover` records pristine CrossOver source imports.
+- `main` is the downstream maintained source tree.
+- `runtime-channel` is the static release-channel branch consumed by Maltoria.
+
+## Builds
+
+macOS runtime builds require an Apple Silicon macOS 26+ runner with Rosetta 2
+and use the repository itself as the Wine source:
+
+```sh
+export POC_WORK_DIR="$(mktemp -d)"
+export GITHUB_RUN_NUMBER=69
+bash scripts/ci/build-release.sh
+```
+
+Linux x86_64 runtime builds use the same maintained source tree:
+
+```sh
+python3 scripts/linux/build.py all --work-dir /tmp/ge-wine-linux
+python3 scripts/linux/package.py --work-dir /tmp/ge-wine-linux --output /tmp/ge-linux-out
+```
+
+Linux packaging intentionally removes the two macOS Steam `CommandLineAppend`
+entries from the installed `wine.inf`, preserving the old Linux behavior while
+keeping one unified source tree. This is transitional; the preferred long-term
+home for those defaults is Maltoria prefix/application configuration rather
+than platform-specific Wine source divergence.
+
+## Migration rule
+
+Do not resurrect patch-driven source preparation (`prepare-source.sh` or
+build-time `git apply`). Fix and evolve the Wine tree directly, with test
+coverage under `tools/tests/`. Remove the frozen patch corpus only after the
+license inventory has been converted from patch-file provenance to commit/path
+provenance.
+
+---
+
+# Upstream Wine README
+
 ## INTRODUCTION
 
 Wine is a program which allows running Microsoft Windows programs
