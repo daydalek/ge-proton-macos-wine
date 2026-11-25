@@ -1032,8 +1032,18 @@ compute_location(const struct module *module, const dwarf2_cuhead_t* head,
         case DW_OP_shr:         stack[stk-1] >>= stack[stk]; stk--; break;
         case DW_OP_plus_uconst: stack[stk] += dwarf2_leb128_as_unsigned(ctx); break;
         case DW_OP_shra:        stack[stk-1] = stack[stk-1] / (1 << stack[stk]); stk--; break;
-        case DW_OP_div:         stack[stk-1] = stack[stk-1] / stack[stk]; stk--; break;
-        case DW_OP_mod:         stack[stk-1] = stack[stk-1] % stack[stk]; stk--; break;
+        case DW_OP_div:
+            /* Register-dependent operands may be unavailable during symbol loading. */
+            if (!stk || !stack[stk]) return loc_err_too_complex;
+            stack[stk-1] = stack[stk-1] / stack[stk];
+            stk--;
+            break;
+        case DW_OP_mod:
+            /* Register-dependent operands may be unavailable during symbol loading. */
+            if (!stk || !stack[stk]) return loc_err_too_complex;
+            stack[stk-1] = stack[stk-1] % stack[stk];
+            stk--;
+            break;
         case DW_OP_ge:          stack[stk-1] = (stack[stk-1] >= stack[stk]); stk--; break;
         case DW_OP_gt:          stack[stk-1] = (stack[stk-1] >  stack[stk]); stk--; break;
         case DW_OP_le:          stack[stk-1] = (stack[stk-1] <= stack[stk]); stk--; break;
