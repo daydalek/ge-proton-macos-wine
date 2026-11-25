@@ -595,6 +595,7 @@ extern void macdrv_dispose_opengl_context(macdrv_opengl_context c);
 extern void macdrv_make_context_current(macdrv_opengl_context c, macdrv_view v, CGRect r);
 extern void macdrv_update_opengl_context(macdrv_opengl_context c);
 extern void macdrv_flush_opengl_context(macdrv_opengl_context c);
+extern void macdrv_present_front_temporal(macdrv_opengl_context c);
 
 
 /* systray / status item */

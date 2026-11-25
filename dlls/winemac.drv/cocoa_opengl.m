@@ -36,6 +36,7 @@
     + (NSView*) dummyView;
     - (void) wine_updateBackingSize:(const CGSize*)size;
     - (void)wine_presentTemporal;
+    - (void)wine_presentTemporalFront;
     - (void)wine_destroyTemporal;
 
 @end
@@ -52,17 +53,34 @@
         [bridge destroyGLResources:self.CGLContextObj];
         [bridge retire]; [bridge release];
     }
-    - (void)wine_presentTemporal
+    - (void)wine_presentTemporalImpl:(BOOL)front
     {
-        if (![WineGDIUpscaler temporalEnabled]) return;
+        static int wgdiTrace=-1;
+        if (wgdiTrace<0) wgdiTrace=getenv("WINE_GDI_GL_TRACE")?1:0;
+        if (![WineGDIUpscaler temporalEnabled]) {
+            if (wgdiTrace) { static int once1; if(!once1++){NSLog(@"WineGLTemporal: present skipped, temporalEnabled=NO");} }
+            return;
+        }
         /* The GL producer owns this field; all view operations stay on main. */
         __block BOOL changed=NO;
         OnMainThread(^{ changed=temporalBridge && ![temporalBridge matchesView:self.view]; });
         if (changed) [self wine_destroyTemporal];
         if (!temporalBridge) OnMainThread(^{
-            temporalBridge=[[WineOpenGLTemporalBridge alloc] initWithView:self.view];
+            NSView *v=self.view;
+            temporalBridge=[[WineOpenGLTemporalBridge alloc] initWithView:v];
+            if (wgdiTrace) NSLog(@"WineGLTemporal: bridge init %@ view=%@ cls=%@ window=%@ visible=%d",
+                temporalBridge?@"ok":@"FAILED", v, NSStringFromClass([v class]), v.window, (int)v.window.isVisible);
         });
-        [temporalBridge captureContext:self.CGLContextObj];
+        if (front) [temporalBridge captureContextFront:self.CGLContextObj];
+        else [temporalBridge captureContext:self.CGLContextObj];
+    }
+    - (void)wine_presentTemporal
+    {
+        [self wine_presentTemporalImpl:NO];
+    }
+    - (void)wine_presentTemporalFront
+    {
+        [self wine_presentTemporalImpl:YES];
     }
     - (void) dealloc
     {
@@ -366,5 +384,24 @@ void macdrv_flush_opengl_context(macdrv_opengl_context c)
     macdrv_update_opengl_context(c);
     [context wine_presentTemporal];
     [context flushBuffer];
+}
+}
+
+/***********************************************************************
+ *              macdrv_present_front_temporal
+ *
+ * Captures the front buffer after a front-buffer present flush
+ * (GL_FLUSH_PRESENT). No flushBuffer: the producer's own glFlush
+ * already pushed the frame to the surface; swapping here would
+ * clobber it with the stale back buffer.
+ */
+void macdrv_present_front_temporal(macdrv_opengl_context c)
+{
+@autoreleasepool
+{
+    WineOpenGLContext *context = (WineOpenGLContext*)c;
+
+    macdrv_update_opengl_context(c);
+    [context wine_presentTemporalFront];
 }
 }

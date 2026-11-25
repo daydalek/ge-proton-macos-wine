@@ -44,19 +44,35 @@ struct WineTemporalGLSlot {
 - (id)initWithView:(NSView *)view;
 - (BOOL)matchesView:(NSView *)view;
 - (void)captureContext:(CGLContextObj)context;
+- (void)captureContextFront:(CGLContextObj)context;
+- (void)captureContext:(CGLContextObj)context front:(BOOL)front;
 - (void)destroyGLResources:(CGLContextObj)context;
 - (void)retire;
 @end
 
 @implementation WineOpenGLTemporalBridge
+static int wgdiGLTrace(void)
+{
+    static int trace=-1;
+    if (trace<0) trace=getenv("WINE_GDI_GL_TRACE")?1:0;
+    return trace;
+}
+
 - (id)initWithView:(NSView *)view
 {
     self=[super init]; if (!self) return nil;
     pendingSlot=-1;
-    if (![WineGDIUpscaler temporalEnabled] || !view.window || !view.window.isVisible) { [self release]; return nil; }
+    if (![WineGDIUpscaler temporalEnabled] || !view.window || !view.window.isVisible) {
+        if (wgdiGLTrace()) NSLog(@"WineGLTemporal: init bail temporal=%d view=%@ window=%@ visible=%d",
+            (int)[WineGDIUpscaler temporalEnabled], view, view.window, (int)view.window.isVisible);
+        [self release]; return nil;
+    }
     targetView=[view retain];
     upscaler=[WineGDIUpscaler new];
-    if (![upscaler supportsTemporalSurfaces]) { [self release]; return nil; }
+    if (![upscaler supportsTemporalSurfaces]) {
+        if (wgdiGLTrace()) NSLog(@"WineGLTemporal: init bail, supportsTemporalSurfaces=NO (temporal=%@)", upscaler?@"created":@"nil");
+        [self release]; return nil;
+    }
     [upscaler setPresentationView:view];
     overlay=[[WineTemporalGLView alloc] initWithFrame:view.bounds];
     overlay.autoresizingMask=NSViewWidthSizable|NSViewHeightSizable;
@@ -187,26 +203,43 @@ struct WineTemporalGLSlot {
         CGLSetCurrentContext(previous);
     }
 }
-- (void)captureContext:(CGLContextObj)context
+- (void)captureContext:(CGLContextObj)context { [self captureContext:context front:NO]; }
+- (void)captureContextFront:(CGLContextObj)context { [self captureContext:context front:YES]; }
+- (void)captureContext:(CGLContextObj)context front:(BOOL)front
 {
-    @synchronized(self) { if (retired || disabled) return; }
-    if (!context || CGLGetCurrentContext()!=context) return;
-    if (![self loadFunctions:context]) { @synchronized(self) { disabled=YES; } return; }
+    @synchronized(self) { if (retired || disabled) {
+        if (wgdiGLTrace()) { static int o0; if(!o0++) NSLog(@"WineGLTemporal: capture bail retired=%d disabled=%d",(int)retired,(int)disabled); }
+        return; } }
+    if (!context || CGLGetCurrentContext()!=context) {
+        if (wgdiGLTrace()) { static int o1; if(!o1++) NSLog(@"WineGLTemporal: capture bail context=%p current=%p",context,CGLGetCurrentContext()); }
+        return;
+    }
+    if (![self loadFunctions:context]) { @synchronized(self) { disabled=YES; }
+        if (wgdiGLTrace()) NSLog(@"WineGLTemporal: capture bail loadFunctions failed, disabled=YES");
+        return;
+    }
     GLint size[2]={0,0},viewport[4]={0,0,0,0},enabled=0;
     CGLIsEnabled(context,kCGLCESurfaceBackingSize,&enabled);
     if (enabled) CGLGetParameter(context,kCGLCPSurfaceBackingSize,size);
     if (size[0]<=0 || size[1]<=0) {
         glGetIntegerv(GL_VIEWPORT,viewport); size[0]=viewport[0]+viewport[2]; size[1]=viewport[1]+viewport[3];
-    }
+        if (wgdiGLTrace()) { static int o2; if(!o2++) NSLog(@"WineGLTemporal: size via viewport %dx%d (backingSize enabled=%d)",size[0],size[1],(int)enabled); }
+    } else if (wgdiGLTrace()) { static int o3; if(!o3++) NSLog(@"WineGLTemporal: size via surface backing %dx%d",size[0],size[1]); }
     if (size[0]<=0 || size[1]<=0 || size[0]>4096 || size[1]>4096 ||
-        (uint64_t)size[0]*size[1]>2u*1024u*1024u) return;
+        (uint64_t)size[0]*size[1]>2u*1024u*1024u) {
+        if (wgdiGLTrace()) { static int o4; if(!o4++) NSLog(@"WineGLTemporal: capture bail size %dx%d (cap 4096/2MP)",size[0],size[1]); }
+        return;
+    }
     unsigned index=WGDI_GL_TEMPORAL_SLOTS; uint64_t value;
     @synchronized(self) {
         if (sourceWidth!=(NSUInteger)size[0] || sourceHeight!=(NSUInteger)size[1]) {
             [self clearGL]; sourceWidth=size[0]; sourceHeight=size[1];
         }
         for (unsigned i=0;i<WGDI_GL_TEMPORAL_SLOTS;++i) if (!slots[i].busy) { index=i; break; }
-        if (index==WGDI_GL_TEMPORAL_SLOTS) return;
+        if (index==WGDI_GL_TEMPORAL_SLOTS) {
+            if (wgdiGLTrace()) { static int o5; if(!o5++) NSLog(@"WineGLTemporal: capture bail, all %d slots busy",(int)WGDI_GL_TEMPORAL_SLOTS); }
+            return;
+        }
         slots[index].busy=YES; slots[index].generation=generation; value=generation;
     }
     struct WineTemporalGLSlot *slot=&slots[index];
@@ -236,7 +269,9 @@ struct WineTemporalGLSlot {
     bindFramebuffer(GL_READ_FRAMEBUFFER_EXT,0);
     GLint oldReadBuffer=0; GLboolean doubleBuffered=GL_FALSE;
     glGetIntegerv(GL_READ_BUFFER,&oldReadBuffer); glGetBooleanv(GL_DOUBLEBUFFER,&doubleBuffered);
-    glReadBuffer(doubleBuffered ? GL_BACK : GL_FRONT);
+    /* Front-buffer presents (GL_FLUSH_PRESENT) must read GL_FRONT even on
+       double-buffered drawables: the back buffer holds stale content. */
+    glReadBuffer(front ? GL_FRONT : (doubleBuffered ? GL_BACK : GL_FRONT));
     bindFramebuffer(GL_DRAW_FRAMEBUFFER_EXT,slot->framebuffer);
     if (checkFramebuffer(GL_READ_FRAMEBUFFER_EXT)!=GL_FRAMEBUFFER_COMPLETE_EXT) ok=NO;
     GLboolean scissor=glIsEnabled(GL_SCISSOR_TEST);

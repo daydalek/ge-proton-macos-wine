@@ -71,6 +71,7 @@ struct macdrv_context
     macdrv_view             read_view;
     CGLPBufferObj           read_pbuffer;
     int                     swap_interval;
+    ULONGLONG               last_front_present;
 };
 
 struct gl_drawable
@@ -2025,6 +2026,15 @@ static void macdrv_surface_flush(struct opengl_drawable *base, UINT flags)
     if (!context) return;
     if (flags & GL_FLUSH_INTERVAL) set_swap_interval(context, base->interval);
     if (flags & GL_FLUSH_UPDATED) make_context_current(context, context->read_view == client->cocoa_view);
+    if (flags & GL_FLUSH_PRESENT && context->context)
+    {
+        ULONGLONG now = NtGetTickCount();
+        if (now - context->last_front_present >= 33)
+        {
+            context->last_front_present = now;
+            macdrv_present_front_temporal(context->context);
+        }
+    }
 }
 
 
