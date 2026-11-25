@@ -190,10 +190,14 @@ static HRESULT video_renderer_connect(struct strmbase_renderer *iface, const AM_
     SetRect(&rect, 0, 0, filter->VideoWidth, filter->VideoHeight);
     filter->window.src = rect;
 
-    AdjustWindowRectEx(&rect, GetWindowLongW(window, GWL_STYLE), FALSE,
-            GetWindowLongW(window, GWL_EXSTYLE));
-    SetWindowPos(window, NULL, 0, 0, rect.right - rect.left, rect.bottom - rect.top,
-            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    /* Preserve dimensions explicitly set by the application across reconnects. */
+    if (!filter->window.explicit_size)
+    {
+        AdjustWindowRectEx(&rect, GetWindowLongW(window, GWL_STYLE), FALSE,
+                GetWindowLongW(window, GWL_EXSTYLE));
+        SetWindowPos(window, NULL, 0, 0, rect.right - rect.left, rect.bottom - rect.top,
+                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
     GetClientRect(window, &filter->window.dst);
 
     return S_OK;

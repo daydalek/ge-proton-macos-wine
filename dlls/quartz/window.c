@@ -419,6 +419,7 @@ HRESULT WINAPI BaseControlWindowImpl_put_Width(IVideoWindow *iface, LONG width)
             SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOMOVE))
         return E_FAIL;
 
+    window->explicit_size = TRUE;
     return S_OK;
 }
 
@@ -475,6 +476,7 @@ HRESULT WINAPI BaseControlWindowImpl_put_Height(IVideoWindow *iface, LONG height
             height, SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOMOVE))
         return E_FAIL;
 
+    window->explicit_size = TRUE;
     return S_OK;
 }
 
@@ -615,6 +617,7 @@ HRESULT WINAPI BaseControlWindowImpl_SetWindowPosition(IVideoWindow *iface,
 
     if (!SetWindowPos(window->hwnd, NULL, left, top, width, height, SWP_NOACTIVATE | SWP_NOZORDER))
         return E_FAIL;
+    window->explicit_size = TRUE;
     return S_OK;
 }
 

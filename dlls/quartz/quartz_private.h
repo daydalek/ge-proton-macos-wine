@@ -85,6 +85,7 @@ struct video_window
 
     RECT src, dst;
     BOOL default_dst;
+    BOOL explicit_size;
 
     BOOL AutoShow;
     HWND hwnd;

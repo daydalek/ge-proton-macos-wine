@@ -506,10 +506,14 @@ static HRESULT vmr_connect(struct strmbase_renderer *iface, const AM_MEDIA_TYPE 
     SetRect(&rect, 0, 0, bitmap_header->biWidth, bitmap_header->biHeight);
     filter->window.src = rect;
 
-    AdjustWindowRectEx(&rect, GetWindowLongW(window, GWL_STYLE), FALSE,
-            GetWindowLongW(window, GWL_EXSTYLE));
-    SetWindowPos(window, NULL, 0, 0, rect.right - rect.left, rect.bottom - rect.top,
-            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    /* Preserve dimensions explicitly set by the application across reconnects. */
+    if (!filter->window.explicit_size)
+    {
+        AdjustWindowRectEx(&rect, GetWindowLongW(window, GWL_STYLE), FALSE,
+                GetWindowLongW(window, GWL_EXSTYLE));
+        SetWindowPos(window, NULL, 0, 0, rect.right - rect.left, rect.bottom - rect.top,
+                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
     GetClientRect(window, &filter->window.dst);
 
     if (filter->mode
