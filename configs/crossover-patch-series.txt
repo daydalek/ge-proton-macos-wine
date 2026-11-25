@@ -1,0 +1,52 @@
+# Ordered patch series applied to the official CrossOver source tree.
+# Paths are relative to the project root. The first entry is the base media
+# port; later entries are checked individually and may be appended to an
+# already prepared tree. Read by scripts/crossover/*.sh and
+# scripts/ci/build-libraries.py.
+patches/crossover/crossover-26.3-media.patch
+patches/wine-ge/quartz-preserve-window-size.patch
+patches/wine-ge/mpeg-audio-wave-format.patch
+patches/wine-ge/command-line-append.patch
+patches/crossover/steam-auto-args.patch
+patches/wine-ge/vkd3d-partial-varyings.patch
+patches/wine-ge/dbghelp-dwarf-divisor.patch
+patches/wine-ge/sechost-device-notify-handle.patch
+patches/wine-ge/stale-present-rect.patch
+patches/wine-ge/opengl-flush-flags.patch
+patches/wine-ge/macos-fullscreen-surface.patch
+patches/wine-ge/wow64-present-rect.patch
+patches/wine-ge/wine-upstream-syscall-wrappers.patch
+patches/crossover/wined3d-backend-selection.patch
+patches/crossover/kernelbase-legacy-directory-info.patch
+patches/crossover/i386-hotpatch-prologue.patch
+patches/crossover/winedmo-repeated-seek.patch
+patches/crossover/winedmo-seek-generation.patch
+patches/crossover/wmp-activex-player2-embedding.patch
+patches/crossover/winedmo-demuxed-frame-boundaries.patch
+patches/crossover/quartz-vmr9-backbuffer-scaling.patch
+patches/crossover/wmp-volume-decibels.patch
+patches/crossover/quartz-filesource-vfs-fallback.patch
+patches/crossover/quartz-vfs-probe-lifetime.patch
+patches/wine-ge/macos-gdi-fullscreen-centering.patch
+patches/wine-ge/ddraw-external-mode-loss.patch
+patches/wine-ge/macos-metalfx-spatial.patch
+patches/wine-ge/macos-gdi-upscalers.patch
+patches/wine-ge/macos-wined3d-temporal.patch
+patches/wine-ge/macos-gdi-metal-presentation-exclusion.patch
+patches/crossover/mfreadwrite-d3d11-allocator-attributes.patch
+patches/crossover/mfreadwrite-preserve-nonzero-seek.patch
+patches/crossover/winedmo-decoder-output-allocator-attributes.patch
+patches/crossover/win32u-vulkan-wow64-mach-vm-remap.patch
+patches/crossover/winedmo-seek-read-flushing.patch
+patches/crossover/quartz-vmr7-native-presentation.patch
+patches/crossover/winedmo-coded-size-notify.patch
+patches/crossover/winedmo-threaded-video-convert.patch
+patches/crossover/mfreadwrite-downstream-format-propagation.patch
+patches/crossover/mf-file-scheme-url-to-path.patch
+patches/wine-ge/ddraw-windowed-swapchain-mode-size.patch
+patches/crossover/winedmo-asf-startup-timestamp-base.patch
+patches/crossover/macos-mouse-capture-and-fullscreen-clip.patch
+patches/crossover/macos-style-frame-sync.patch
+patches/crossover/macos-emulate-modeset-resolution.patch
+patches/wine-ge/macos-fullscreen-surface-black-padding.patch
+patches/crossover/macos-gdi-upscale-frontbuffer-present.patch

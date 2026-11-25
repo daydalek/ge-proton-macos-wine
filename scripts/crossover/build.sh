@@ -1,0 +1,67 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Build the patched CrossOver Wine core into work/crossover-port/stage.
+set -euo pipefail
+source "$(dirname "$0")/../lib/common.sh"
+mode="${1:-full}"
+case "$mode" in full|media) ;; *) echo 'Usage: build.sh [full|media]' >&2; exit 2 ;; esac
+port="$POC_CROSSOVER_PORT"
+source_dir="${POC_WINE_SOURCE:-$POC_PROJECT}"
+poc_require_path "$source_dir/configure" "the repository root must be the maintained Wine source tree"
+
+poc_setup_wine_build_env
+poc_require_rosetta
+poc_note "Building CrossOver core ($mode, macOS >= $MACOSX_DEPLOYMENT_TARGET, $POC_JOBS jobs)"
+mkdir -p "$port/build" "$port/stage"
+cd "$port/build"
+"$source_dir/configure" --host=x86_64-apple-darwin --enable-archs=i386,x86_64 \
+  --with-mingw=llvm-mingw --with-ffmpeg --with-coreaudio --with-freetype --with-vulkan --with-gnutls \
+  --without-x --without-wayland --without-pulse --without-alsa \
+  --disable-tests --prefix="$port/stage" > "$port/configure.log" 2>&1
+case "$mode" in
+  media)
+    make -j"$POC_JOBS" dlls/quartz/all dlls/ddraw/all dlls/winedmo/all dlls/wmp/all \
+      dlls/qasf/all dlls/wmadmod/all dlls/wmvcore/all dlls/mf/all \
+      dlls/mfmediaengine/all dlls/mfplat/all dlls/mfreadwrite/all \
+      dlls/mfsrcsnk/all dlls/msauddecmft/all > "$port/build-media.log" 2>&1
+    ;;
+  full)
+    make -j"$POC_JOBS" > "$port/build-full.log" 2>&1
+    make install > "$port/install.log" 2>&1
+    test -x "$POC_COREML_PYTHON" || poc_die "Core ML Python missing: $POC_COREML_PYTHON (create it with: python3 -m venv work/coreml/venv && work/coreml/venv/bin/pip install -r scripts/requirements-coreml.txt)"
+    python3 "$POC_PROJECT/scripts/build-gdi-upscalers.py" --stage "$port/stage" \
+      --work "$port/gdi-upscalers" --jobs "$POC_JOBS" \
+      --coreml-python "$POC_COREML_PYTHON" > "$port/build-gdi-upscalers.log" 2>&1
+    PYTHONPATH="$POC_PROJECT/scripts/lib" python3 - "$port/stage" <<'PY_GRAPHICS'
+import sys
+from wined3d_builtins import preserve_wined3d_builtins
+preserve_wined3d_builtins(sys.argv[1])
+PY_GRAPHICS
+    # Record successful compilation inputs beside the installed core.
+    python3 - "$POC_PROJECT" "$source_dir" "$port/stage" <<'PY_BUILD'
+import hashlib, json, pathlib, subprocess, sys
+project, source, stage = map(pathlib.Path, sys.argv[1:4])
+lock = json.loads((project / 'configs/crossover-source-lock.json').read_text())
+modules = ['bin/wine', 'bin/wineserver', 'lib/wine/x86_64-unix/win32u.so',
+           'lib/wine/x86_64-unix/winemac.so', 'lib/wine/x86_64-windows/wow64win.dll',
+            'lib/wine/x86_64-unix/bcrypt.so', 'lib/wine/x86_64-unix/secur32.so',
+            'lib/wine/x86_64-unix/ntdll.so', 'lib/wine/i386-windows/gdi32.dll',
+            'lib/wine/i386-windows/user32.dll', 'lib/wine/x86_64-unix/libwinegdiupscalers.dylib',
+            'lib/wine/x86_64-unix/gdi-upscalers/anime4k.metallib',
+            'lib/wine/x86_64-unix/gdi-upscalers/temporal.metallib',
+            'lib/wine/x86_64-unix/gdi-upscalers/models-se/up2x-no-denoise.param',
+            'lib/wine/x86_64-unix/gdi-upscalers/models-se/up2x-no-denoise.bin',
+            'lib/wine/x86_64-unix/gdi-upscalers/models-animevideov3/realesr-animevideov3-x2.param',
+            'lib/wine/x86_64-unix/gdi-upscalers/models-animevideov3/realesr-animevideov3-x2.bin',
+            'lib/wine/x86_64-unix/gdi-upscalers/winegdi-coreml-helper',
+            'lib/wine/x86_64-unix/gdi-upscalers/coreml/manifest.json']
+record = {'core': 'crossover-ge-media', 'baseline': 'CrossOver ' + lock['cross_over_version'],
+          'source_archive_sha256': lock['source_sha256'],
+          'source_commit': subprocess.check_output(['git', '-C', str(source), 'rev-parse', 'HEAD'], text=True).strip(),
+          'source_dirty': bool(subprocess.check_output(['git', '-C', str(source), 'status', '--porcelain'], text=True).strip()),
+          'compiled_modules': {name: hashlib.sha256((stage / name).read_bytes()).hexdigest() for name in modules},
+          'gdi_upscalers': json.loads((stage / '.gdi-upscalers-build.json').read_text())}
+(stage / '.wine-build-provenance.json').write_text(json.dumps(record, indent=2) + '\n')
+PY_BUILD
+    ;;
+esac

@@ -1,0 +1,285 @@
+name: Build and release Whisky Libraries and Linux Wine
+
+on:
+  pull_request:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      libraries_only:
+        description: 'Legacy released-core packaging check only; does not build or verify current FFmpeg codecs'
+        type: boolean
+        default: false
+      linux_only:
+        description: 'Build the Linux runtime only'
+        type: boolean
+        default: false
+      compile_only:
+        description: 'With linux_only: compile and statically inspect; defer Wine/media execution'
+        type: boolean
+        default: false
+      linux_release_tag:
+        description: 'Optional new Linux-only prerelease tag, e.g. v0.1.6-linux-amd64'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wine-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  source-check:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    env:
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+      ASAN_OPTIONS: detect_leaks=0
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate input combination
+        shell: bash
+        run: |
+          if [ "${{ inputs.compile_only }}" = true ] && [ "${{ inputs.linux_only }}" != true ]; then
+            echo 'Select linux_only=true for compile_only builds.' >&2
+            exit 1
+          fi
+      - name: Install Linux prerequisites
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo -n apt-get update
+          sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 clang libclang-rt-18-dev cmake ninja-build \
+            dbus-daemon pulseaudio pulseaudio-utils
+      - name: Prepare macOS prerequisites
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          command -v cmake >/dev/null || brew install cmake
+          if [ "$(uname -m)" = arm64 ] && ! /usr/bin/arch -x86_64 /usr/bin/true; then
+            sudo /usr/sbin/softwareupdate --install-rosetta --agree-to-license
+          fi
+      - name: Run source tests
+        if: ${{ !inputs.compile_only }}
+        shell: bash
+        run: |
+          mkdir -p outputs/checks
+          {
+            if [ "${{ runner.os }}" = Linux ]; then
+              python3 scripts/ci/run-source-tests.py --output outputs/checks/source-tests.json \
+                --allow-skip 'macOS Objective-C adapter' \
+                --allow-skip 'Objective-C Foundation harness is macOS-only' \
+                --allow-skip 'Optional window-free GPU/reference comparison'
+            else
+              python3 scripts/ci/run-source-tests.py --output outputs/checks/source-tests.json \
+                --allow-skip 'Linux audio tools are required' \
+                --allow-skip 'Build native library and set WGDI_TEST_NATIVE_LIBRARY' \
+                --allow-skip 'Optional window-free GPU/reference comparison' \
+                --allow-skip 'i686-w64-mingw32-clang not found' \
+                --allow-skip 'x86_64-w64-mingw32-clang not found'
+            fi
+          } 2>&1 | tee outputs/checks/source-tests.log
+      - name: Compile source files only
+        if: ${{ inputs.compile_only }}
+        shell: bash
+        run: |
+          python3 -m compileall -q scripts tools/tests
+          python3 tools/tests/test_winedmo_seek_generation.py --compile-only
+          python3 tools/tests/test_quartz_no_position.py --compile-only
+      - name: Configure dependency-free native tests
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p outputs/checks
+          cmake -S native/gdi-upscalers -B outputs/checks/native-build \
+            -DWGDI_TESTS_ONLY=ON -DWGDI_TEST_SANITIZERS=ON -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            2>&1 | tee outputs/checks/native-configure.log
+      - name: Build dependency-free native tests
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build outputs/checks/native-build --parallel 2 \
+            2>&1 | tee outputs/checks/native-build.log
+      - name: Run dependency-free native tests
+        if: ${{ !inputs.compile_only }}
+        shell: bash
+        run: |
+          set -o pipefail
+          ctest --test-dir outputs/checks/native-build --output-on-failure --no-tests=error \
+            --output-junit "$PWD/outputs/checks/native-tests.xml" \
+            2>&1 | tee outputs/checks/native-tests.log
+      - name: Compile Core ML helper
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          xcrun clang++ -std=c++17 -O2 -arch arm64 -mmacosx-version-min=13.0 -fobjc-arc \
+            -Wall -Wextra -Werror -I native/gdi-upscalers/include \
+            native/gdi-upscalers/src/coreml-helper.mm \
+            -framework Foundation -framework CoreML -framework Accelerate \
+            -o outputs/checks/winegdi-coreml-helper
+      - name: Check publication history and script syntax
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          python3 scripts/release-check.py --public-history
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          for file in Path('scripts').rglob('*.py'):
+              ast.parse(file.read_text(), filename=str(file))
+          PY
+          while IFS= read -r file; do bash -n "$file"; done < <(find scripts tools -name '*.sh')
+      - name: Upload source-check diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: source-check-${{ matrix.os }}
+          path: |
+            outputs/checks/*.json
+            outputs/checks/*.log
+            outputs/checks/*.xml
+            outputs/checks/native-build/Testing/Temporary/*
+          if-no-files-found: warn
+          compression-level: 0
+
+  build:
+    needs: source-check
+    if: (github.event_name == 'workflow_dispatch' && !inputs.libraries_only && !inputs.linux_only) || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ${{ fromJSON(vars.MACOS_BUILD_RUNNER_JSON || '"xcode-27"') }}
+    timeout-minutes: 240
+    env:
+      POC_MACOSX_DEPLOYMENT_TARGET: '15.0'
+      POC_JOBS: '4'
+      POC_RELEASE_DIR: ${{ github.workspace }}/outputs/release
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prepare hosted runner dependencies
+        if: runner.environment == 'github-hosted'
+        run: |
+          command -v cmake >/dev/null || brew install cmake
+          command -v pkg-config >/dev/null || brew install pkgconf
+          if ! /usr/bin/arch -x86_64 /usr/bin/true; then
+            sudo /usr/sbin/softwareupdate --install-rosetta --agree-to-license
+          fi
+      - name: Set up Python for Core ML model conversion
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.12'
+      - name: Create the Core ML build environment
+        run: |
+          python3 -m venv work/coreml/venv
+          work/coreml/venv/bin/pip install --disable-pip-version-check --no-input -r scripts/requirements-coreml.txt
+      - name: Build macOS 15 Whisky Libraries and verify FFmpeg capabilities
+        env:
+          POC_WORK_DIR: ${{ runner.temp }}/wine-build-${{ github.run_id }}-${{ github.run_attempt }}
+        run: bash scripts/ci/build-release.sh
+      - name: Upload distributable archives
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: whisky-libraries
+          path: outputs/release/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  build-linux:
+    needs: source-check
+    if: (github.event_name == 'workflow_dispatch' && !inputs.libraries_only) || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build-linux.yml
+    with:
+      compile_only: ${{ inputs.compile_only || false }}
+      release_tag: ${{ inputs.linux_release_tag || '' }}
+
+  verify-libraries:
+    needs: source-check
+    if: github.event_name == 'workflow_dispatch' && inputs.libraries_only
+    runs-on: ${{ fromJSON(vars.MACOS_BUILD_RUNNER_JSON || '"xcode-27"') }}
+    timeout-minutes: 45
+    env:
+      POC_MACOSX_DEPLOYMENT_TARGET: '15.0'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Prepare Rosetta
+        run: |
+          if ! /usr/bin/arch -x86_64 /usr/bin/true; then
+            sudo /usr/sbin/softwareupdate --install-rosetta --agree-to-license
+          fi
+      - name: Package and launch the legacy released runtime (not current codec validation)
+        env:
+          POC_WORK_DIR: ${{ runner.temp }}/libraries-check-${{ github.run_id }}-${{ github.run_attempt }}
+        run: python3 scripts/ci/verify-libraries.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: whisky-libraries-integration-check
+          path: |
+            ${{ runner.temp }}/libraries-check-${{ github.run_id }}-${{ github.run_attempt }}/release/*
+            ${{ runner.temp }}/libraries-check-${{ github.run_id }}-${{ github.run_attempt }}/diagnostics/*
+          compression-level: 0
+          if-no-files-found: error
+
+
+  publish:
+    needs: [build, build-linux]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: whisky-libraries
+          path: release
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: wine-linux-amd64
+          path: release
+      - name: Verify and publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          cd release
+          sha256sum -c SHA256SUMS
+          sha256sum -c SHA256SUMS-linux-amd64
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release already exists; verify its required runtime assets before updating the channel."
+            gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" --jq '[.assets[] | select(.state == "uploaded") | .name] | contains(["Libraries.tar.gz", "Libraries-sources.tar.gz", "WhiskyWineVersion.plist", "SHA256SUMS", "Libraries-privacy-audit.json", "Libraries-static-check.json", "Libraries-ffmpeg-capabilities.json", "wine-linux-amd64.tar.gz", "wine-linux-amd64-sources.tar.gz", "SHA256SUMS-linux-amd64", "linux-release-manifest.json", "linux-privacy-audit.json", "linux-static-check.json", "linux-ffmpeg-capabilities.json"])' | grep -qx true
+            if [ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true ]; then
+              gh release edit "$RELEASE_TAG" --draft=false --prerelease
+            fi
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease \
+              --title "$RELEASE_TAG — macOS 15+ Apple Silicon (Rosetta) · Linux amd64" \
+              --notes-file RELEASE-NOTES.md Libraries.tar.gz Libraries-sources.tar.gz WhiskyWineVersion.plist SHA256SUMS release-manifest.json Libraries-privacy-audit.json Libraries-static-check.json Libraries-ffmpeg-capabilities.json RELEASE-NOTES.md wine-linux-amd64.tar.gz wine-linux-amd64-sources.tar.gz SHA256SUMS-linux-amd64 linux-release-manifest.json linux-privacy-audit.json linux-static-check.json linux-ffmpeg-capabilities.json
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease
+          fi
+      - name: Refresh the public Wine runtime channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 scripts/ci/publish-runtime-channel.py --tag "$RELEASE_TAG"

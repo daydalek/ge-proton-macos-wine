@@ -1,0 +1,64 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+set -euo pipefail
+kit="$(cd "$(dirname "$0")" && pwd -P)"
+source "$kit/../../scripts/lib/common.sh"
+toolchain="$POC_LLVM_MINGW/bin"
+poc_require_path "$toolchain/i686-w64-mingw32-clang" "run scripts/build-deps.sh"
+for target in i686 x86_64; do
+    case "$target" in i686) bits=x86;; x86_64) bits=x64;; esac
+    "$toolchain/$target-w64-mingw32-clang" -Wall -Wextra -Werror -O2 -municode \
+      "$kit/media-vfs-lifetime-probe.c" -o "$kit/media-vfs-lifetime-probe-$bits.exe" \
+      -lole32 -lstrmiids -luuid
+    "$toolchain/$target-w64-mingw32-clang" -Wall -Wextra -O2 \
+      "$kit/backend-switch-probe.c" -o "$kit/backend-switch-probe-$bits.exe" -ldxguid -luser32
+    "$toolchain/$target-w64-mingw32-clang" -Wall -O2 \
+      "$kit/crypto-probe.c" -o "$kit/crypto-probe-$bits.exe" -lbcrypt -lsecur32
+    "$toolchain/$target-w64-mingw32-clang" -Wall -O2 \
+      "$kit/fullscreen-state-probe.c" -o "$kit/fullscreen-state-probe-$bits.exe" -luser32
+    "$toolchain/$target-w64-mingw32-clang" -Wall -Wextra -Werror -O2 \
+      "$kit/ddraw-mode-loss-probe.c" -o "$kit/ddraw-mode-loss-probe-$bits.exe" -lddraw -ldxguid -luser32
+    "$toolchain/$target-w64-mingw32-clang" -Wall -Wextra -Werror -O2 \
+      "$kit/ddraw-windowed-restore-probe.c" -o "$kit/ddraw-windowed-restore-probe-$bits.exe" \
+      -lddraw -ldxguid -luser32 -lgdi32
+    "$toolchain/$target-w64-mingw32-clang" -Wall -O2 -municode \
+      "$kit/media-probe.c" -o "$kit/media-probe-$bits.exe" \
+      -lole32 -loleaut32 -lstrmiids -luuid
+    "$toolchain/$target-w64-mingw32-clang" -Wall -Wextra -Werror -O2 -municode \
+      "$kit/mf-source-reader-seek-probe.c" -o "$kit/mf-source-reader-seek-probe-$bits.exe" \
+      -lmfreadwrite -lmfplat -lmfuuid -lole32 -luuid
+    "$toolchain/$target-w64-mingw32-clang" -Wall -Wextra -Werror -O2 -municode \
+      "$kit/wm-reader-video-probe.c" -o "$kit/wm-reader-video-probe-$bits.exe" \
+      -lole32 -luuid
+    "$toolchain/$target-w64-mingw32-clang" -Wall -Wextra -Werror -O2 -municode \
+      "$kit/wmp-probe.c" -o "$kit/wmp-probe-$bits.exe" \
+      -lole32 -loleaut32 -luuid
+    "$toolchain/$target-w64-mingw32-clang" -Wall -O2 -municode \
+      "$kit/child-window-probe.c" -o "$kit/child-window-probe-$bits.exe" \
+      -lole32 -loleaut32 -lstrmiids -luuid
+    "$toolchain/$target-w64-mingw32-clang" -Wall -Wextra -O2 \
+      "$kit/exception-probe.c" -o "$kit/exception-probe-$bits.exe"
+    "$toolchain/$target-w64-mingw32-clang" -Wall -Wextra -O2 \
+      "$kit/syscall-boolean-probe.c" -o "$kit/syscall-boolean-probe-$bits.exe"
+    "$toolchain/$target-w64-mingw32-clang" -Wall -Wextra -O2 \
+      "$kit/directory-compat-probe.c" -o "$kit/directory-compat-probe-$bits.exe"
+    "$toolchain/$target-w64-mingw32-clang" -Wall -Wextra -O2 \
+      "$kit/hotpatch-probe.c" -o "$kit/hotpatch-probe-$bits.exe" -lgdi32 -luser32
+    "$toolchain/$target-w64-mingw32-clang" -Wall -O2 -municode \
+      "$kit/reconnect-probe.c" -o "$kit/reconnect-probe-$bits.exe" \
+      -lole32 -loleaut32 -lstrmiids -luuid
+    "$toolchain/$target-w64-mingw32-clang" -Wall -O2 -municode \
+      "$kit/mpeg-audio-format-probe.c" -o "$kit/mpeg-audio-format-probe-$bits.exe" \
+      -lole32 -loleaut32 -lstrmiids -luuid
+    "$toolchain/$target-w64-mingw32-clang" -Wall -Wextra -O2 \
+      -I"$POC_DEPS/include" "$kit/vulkan-probe.c" -o "$kit/vulkan-probe-$bits.exe" -luser32
+    "$toolchain/$target-w64-mingw32-clang" -Wall -O2 -municode \
+      "$kit/command-line-probe.c" -o "$kit/command-line-probe-$bits.exe" -ladvapi32
+    "$toolchain/$target-w64-mingw32-clang" -Wall -O2 "$kit/device-notify-probe.c" -o "$kit/device-notify-probe-$bits.exe" -luser32
+    "$toolchain/$target-w64-mingw32-clang" -Wall -g -O2 "$kit/dbghelp-probe.c" -o "$kit/dbghelp-probe-$bits.exe" -ldbghelp
+    "$toolchain/$target-w64-mingw32-clang" -Wall -O2 -municode "$kit/dwarf-divisor-probe.c" -o "$kit/dwarf-divisor-probe-$bits.exe" -ldbghelp
+    "$toolchain/$target-w64-mingw32-clang" -shared -nostdlib -Wl,--entry,fixture "$kit/dwarf-divisor-fixture.S" -o "$kit/dwarf-divisor-fixture-$bits.dll"
+done
+"$toolchain/x86_64-w64-mingw32-clang" -Wall -Wextra -Werror -O2 -municode \
+  "$kit/mf-video-frame-probe.c" -o "$kit/mf-video-frame-probe-x64.exe" \
+  -lmfreadwrite -lmfplat -lmfuuid -lole32 -luuid -ld3d11 -ldxguid

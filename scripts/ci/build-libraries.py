@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: LGPL-2.1-or-later
+"""Build the independent Whisky Libraries asset from this CI run's Wine stage."""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import plistlib
+import re
+import shutil
+import subprocess
+import sys
+import tarfile
+import urllib.request
+
+PROJECT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT / 'scripts/lib'))
+from poc_common import (STAGE, CROSSOVER_PORT, WORK, SETTINGS, sha256_file,
+                        DXVK_BASE_URL, DXVK_BASE_SHA256)
+
+# Bootstrap only the pinned DXVK payload. Wine always comes from the current build.
+
+
+def extract_dxvk(archive, destination):
+    with tarfile.open(archive) as tf:
+        for member in tf:
+            if member.name == 'Libraries/WhiskyWineVersion.plist' or member.name.startswith('Libraries/DXVK/'):
+                if member.isfile():
+                    if Path(member.name).is_absolute() or '..' in Path(member.name).parts:
+                        raise ValueError('Unexpected DXVK archive path')
+                    target = destination / member.name
+                    if destination.resolve() not in target.resolve().parents:
+                        raise ValueError('Unexpected DXVK archive path')
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with tf.extractfile(member) as source, target.open('wb') as output:
+                        shutil.copyfileobj(source, output)
+    base = destination / 'Libraries'
+    info = plistlib.loads((base / 'WhiskyWineVersion.plist').read_bytes())
+    if info['dxvkVersion'] != '1.10.3':
+        raise ValueError('Unexpected DXVK version')
+    for arch in ('x32', 'x64'):
+        for name in ('d3d11.dll', 'd3d10core.dll'):
+            if not (base / 'DXVK' / arch / name).is_file():
+                raise ValueError('Incomplete DXVK payload')
+    return base
+
+
+def update_checksums(output):
+    files = [p for p in sorted(output.iterdir()) if p.is_file() and p.name != 'SHA256SUMS']
+    (output / 'SHA256SUMS').write_text(''.join(f'{sha256_file(p)}  {p.name}\n' for p in files))
+
+
+REQUIRED_MODULES = ('bin/wine', 'bin/wineserver', 'lib/wine/x86_64-unix/win32u.so',
+                    'lib/wine/x86_64-unix/winemac.so', 'lib/wine/x86_64-windows/wow64win.dll',
+                    'lib/wine/x86_64-unix/bcrypt.so', 'lib/wine/x86_64-unix/secur32.so',
+                    'lib/wine/x86_64-unix/ntdll.so', 'lib/wine/i386-windows/gdi32.dll',
+                    'lib/wine/i386-windows/user32.dll', 'lib/wine/x86_64-unix/libwinegdiupscalers.dylib',
+                    'lib/wine/x86_64-unix/gdi-upscalers/anime4k.metallib',
+                    'lib/wine/x86_64-unix/gdi-upscalers/temporal.metallib',
+                    'lib/wine/x86_64-unix/gdi-upscalers/models-se/up2x-no-denoise.param',
+                    'lib/wine/x86_64-unix/gdi-upscalers/models-se/up2x-no-denoise.bin')
+
+
+def validate_compiled_provenance(wine_stage, project=PROJECT):
+    compiled = json.loads((wine_stage / '.wine-build-provenance.json').read_text())
+    lock = json.loads((project / 'configs/crossover-source-lock.json').read_text())
+    if (compiled['core'] != 'crossover-ge-media'
+            or compiled['source_archive_sha256'] != lock['source_sha256']):
+        raise ValueError('Expected the locked CrossOver core')
+    if not set(REQUIRED_MODULES) <= compiled['compiled_modules'].keys():
+        raise ValueError('Incomplete compiled module provenance')
+    current_commit = subprocess.check_output(['git', '-C', str(project), 'rev-parse', 'HEAD'], text=True).strip()
+    if compiled.get('source_commit') != current_commit or compiled.get('source_dirty'):
+        raise ValueError('Compiled Wine source does not match a clean current checkout')
+    for name, digest in compiled['compiled_modules'].items():
+        if sha256_file(wine_stage / name) != digest:
+            raise ValueError('Compiled module provenance mismatch: ' + name)
+    return compiled
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--version', required=True, help='Monotonically increasing runtime version X.Y.Z')
+    parser.add_argument('--output', type=Path, required=True, help='Existing CI release output directory')
+    parser.add_argument('--wine-stage', type=Path, default=CROSSOVER_PORT / 'stage',
+                        help='CrossOver Wine install tree; validation can provide a released core')
+    parser.add_argument('--base-archive', type=Path, help='Pinned DXVK bootstrap archive (local verification)')
+    args = parser.parse_args()
+    if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', args.version):
+        parser.error('version must be X.Y.Z')
+    output = args.output.resolve()
+    if not output.is_dir():
+        parser.error('create the normal release output first')
+    archive = args.base_archive.resolve() if args.base_archive else WORK / 'whisky-dxvk-bootstrap.tar.gz'
+    if not archive.exists():
+        request = urllib.request.Request(DXVK_BASE_URL, headers={'User-Agent': 'Wine-Libraries-CI'})
+        with urllib.request.urlopen(request, timeout=120) as source, archive.open('wb') as dest:
+            shutil.copyfileobj(source, dest)
+    if sha256_file(archive) != DXVK_BASE_SHA256:
+        raise ValueError('DXVK bootstrap archive digest mismatch')
+    staging = WORK / 'whisky-libraries-staging'
+    staging.mkdir()
+    base = extract_dxvk(archive, staging / 'dxvk-base')
+    release_context = json.loads((output / 'release-manifest.json').read_text())
+    core_kind = release_context.get('core', 'crossover-ge-media')
+    compiled = None
+    if 'validation_scope' not in release_context:
+        compiled = validate_compiled_provenance(args.wine_stage)
+        shadow_meta = STAGE / 'deps-x64/share/whisky/moltenvk-shadow-build.json'
+        shadow_patch = shadow_meta.parent / 'moltenvk-shadow-import.patch'
+        shadow = json.loads(shadow_meta.read_text())
+        if (sha256_file(shadow_patch) != shadow['patch_sha256']
+                or sha256_file(STAGE / 'deps-x64/lib/libMoltenVK.dylib') != shadow['dylib_sha256']
+                or shadow['default_enabled'] is not False):
+            raise ValueError('MoltenVK shadow-import build provenance mismatch')
+
+    assembled = staging / 'assembled'
+    public = staging / 'public'
+    subprocess.run([sys.executable, str(PROJECT / 'scripts/ci/assemble-libraries.py'),
+                    '--stage', str(STAGE), '--wine-stage', str(args.wine_stage), '--core', core_kind, '--base-libraries', str(base),
+                    '--version', args.version, '--output', str(assembled)], check=True)
+    provenance_path = assembled / 'Libraries/GE-Media/runtime-manifest.json'
+    provenance = json.loads(provenance_path.read_text())
+    provenance['packaging_commit'] = provenance.pop('poc_commit')
+    provenance['packaging_checkout_dirty'] = provenance.pop('poc_dirty')
+    provenance['source_kind'] = 'released-core validation' if 'validation_scope' in release_context else 'current CI CrossOver Wine build'
+    if 'validation_scope' not in release_context:
+        provenance['ffmpeg_profile'] = 'builtin-software-playback'
+        provenance['wine_crypto'] = 'bundled GnuTLS; certificate verification enabled'
+    if 'input_archive_sha256' in release_context:
+        provenance['input_archive_sha256'] = release_context['input_archive_sha256']
+    provenance['wine_base'] = release_context.get('wine_base', 'CrossOver 26.3.0')
+    if 'crossover_source_sha256' in release_context:
+        provenance['crossover_source_sha256'] = release_context['crossover_source_sha256']
+    if compiled is not None:
+        provenance['build_provenance'] = compiled
+    provenance_path.write_text(json.dumps(provenance, indent=2) + '\n')
+    objcopy = WORK / 'poc/tools' / SETTINGS['POC_LLVM_MINGW_DIR'] / 'bin/llvm-objcopy'
+    subprocess.run([sys.executable, str(PROJECT / 'scripts/ci/prepare-libraries.py'),
+                    '--input', str(assembled / 'Libraries'), '--output', str(public),
+                    '--objcopy', str(objcopy), '--private-name', os.environ.get('USER', 'runner')], check=True)
+    crypto_checks = [] if 'validation_scope' in release_context else ['--require-crypto', '--require-shadow-moltenvk']
+    subprocess.run([sys.executable, str(PROJECT / 'scripts/static-check.py'),
+                    '--libraries', '--package', str(public / 'Libraries'),
+                    '--max-minimum-macos', '15.0', *crypto_checks], check=True)
+    # Check the final stripped/relocated libraries, not the build host's ffmpeg.
+    # The legacy packaging-only job intentionally reuses an older released core.
+    ffmpeg = None
+    if 'validation_scope' not in release_context:
+        capability_report = output / 'Libraries-ffmpeg-capabilities.json'
+        subprocess.run([sys.executable, str(PROJECT / 'scripts/ci/check-ffmpeg.py'),
+                        '--library-dir', str(public / 'Libraries/Wine/lib'),
+                        '--output', str(capability_report)], check=True)
+        ffmpeg = json.loads(capability_report.read_text())
+    static = json.loads((public / 'Libraries/static-check.json').read_text())
+    shutil.move(public / 'Libraries/static-check.json', output / 'Libraries-static-check.json')
+    for name in ('Libraries.tar.gz', 'WhiskyWineVersion.plist'):
+        shutil.copy2(public / name, output / name)
+    # Anonymous report belongs beside the package; detailed local logs stay out.
+    shutil.copy2(public / 'privacy-audit.json', output / 'Libraries-privacy-audit.json')
+    manifest = json.loads((output / 'release-manifest.json').read_text())
+    manifest['minimum_macos_actual'] = static['minimum_macos_actual']
+    manifest['static_checks'] = static
+    if ffmpeg is not None:
+        manifest['ffmpeg'] = ffmpeg
+    manifest['whisky_runtime'] = {'version': args.version, 'core': core_kind, 'archive': 'Libraries.tar.gz',
+                                  'dxvk_version': '1.10.3', 'privacy_audit': 'Libraries-privacy-audit.json',
+                                  'bootstrap_sha256': DXVK_BASE_SHA256}
+    (output / 'release-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+    notes = output / 'RELEASE-NOTES.md'
+    with notes.open('a') as f:
+        source_description = 'released media core' if 'validation_scope' in manifest else "this CI run's CrossOver Wine build"
+        f.write('\nWhisky-compatible runtime: Libraries.tar.gz and WhiskyWineVersion.plist.\n'
+                f'The Wine core is from {source_description}; DXVK-macOS 1.10.3 is digest-pinned.\n'
+                'Runtime version: ' + args.version + '.\n')
+        if ffmpeg is not None:
+            f.write('FFmpeg: broad built-in software playback (LGPL 2.1+); '
+                    'actual registered formats are listed in Libraries-ffmpeg-capabilities.json.\n'
+                    'Optional external codecs/hardware backends are not bundled; '
+                    'Wine integration and game playback require separate acceptance.\n')
+    update_checksums(output)
+    print('Whisky Libraries assets ready:', output)
+
+
+if __name__ == '__main__':
+    main()

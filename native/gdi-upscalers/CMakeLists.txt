@@ -1,0 +1,132 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+cmake_minimum_required(VERSION 3.20)
+project(wine_gdi_upscalers LANGUAGES C CXX)
+option(WGDI_TESTS_ONLY "Configure only the dependency-free native test harnesses" OFF)
+option(WGDI_TEST_SANITIZERS "Build native test harnesses with ASan and UBSan" OFF)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
+include(CTest)
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()
+if(WGDI_TESTS_ONLY)
+    if(NOT BUILD_TESTING)
+        message(FATAL_ERROR "WGDI_TESTS_ONLY requires BUILD_TESTING=ON")
+    endif()
+    return()
+endif()
+if(NOT APPLE)
+    message(FATAL_ERROR "This library implements macOS Wine GDI presentation")
+endif()
+enable_language(OBJCXX)
+set(CMAKE_OBJCXX_STANDARD 17)
+set(CMAKE_OBJCXX_VISIBILITY_PRESET hidden)
+add_compile_options("-ffile-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}=/usr/src/wine-gdi-upscalers"
+                    "-ffile-prefix-map=${NCNN_SOURCE_DIR}=/usr/src/ncnn")
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+find_program(XCRUN xcrun REQUIRED)
+set(NCNN_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(NCNN_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(NCNN_BUILD_BENCHMARK OFF CACHE BOOL "" FORCE)
+set(NCNN_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(NCNN_VULKAN OFF CACHE BOOL "" FORCE)
+set(NCNN_OPENMP OFF CACHE BOOL "" FORCE)
+set(NCNN_SHARED_LIB OFF CACHE BOOL "" FORCE)
+set(NCNN_INSTALL_SDK OFF CACHE BOOL "" FORCE)
+set(NCNN_AVX512 OFF CACHE BOOL "" FORCE)
+set(NCNN_VERSION 20240410 CACHE STRING "" FORCE)
+if(NOT EXISTS "${NCNN_SOURCE_DIR}/CMakeLists.txt" OR NOT EXISTS "${WGDI_MODEL_DIR}/up2x-no-denoise.bin"
+   OR NOT EXISTS "${WGDI_ESRGAN_MODEL_DIR}/realesr-animevideov3-x2.bin")
+    message(FATAL_ERROR "Use scripts/build-gdi-upscalers.py to prepare locked sources and models")
+endif()
+# Include the fixed models' operations and ncnn's internal conversion helpers.
+# This keeps unrelated image operators out of the Wine presentation library.
+set(MODEL_LAYERS Input Convolution Split Pooling BinaryOp Crop Deconvolution InnerProduct
+                 ReLU Sigmoid Clip Mish HardSwish Gemm Packing Padding Flatten Reshape Cast Interp
+                 PReLU PixelShuffle)
+file(STRINGS "${NCNN_SOURCE_DIR}/src/CMakeLists.txt" LAYER_DECLARATIONS REGEX "^ncnn_add_layer\\(")
+foreach(DECLARATION IN LISTS LAYER_DECLARATIONS)
+    string(REGEX MATCH "ncnn_add_layer\\(([A-Za-z0-9_]+)" MATCHED "${DECLARATION}")
+    set(LAYER "${CMAKE_MATCH_1}")
+    string(TOLOWER "${LAYER}" LOWER_LAYER)
+    if(LAYER IN_LIST MODEL_LAYERS)
+        set(WITH_LAYER_${LOWER_LAYER} ON CACHE BOOL "" FORCE)
+    else()
+        set(WITH_LAYER_${LOWER_LAYER} OFF CACHE BOOL "" FORCE)
+    endif()
+endforeach()
+# ncnn 20240410 consults CMAKE_SYSTEM_PROCESSOR before Apple's -arch flag.
+# Select the same single architecture for its optimized layer registry.
+set(CMAKE_SYSTEM_PROCESSOR "${CMAKE_OSX_ARCHITECTURES}")
+add_subdirectory("${NCNN_SOURCE_DIR}" ncnn EXCLUDE_FROM_ALL)
+
+set(RESOURCES "${CMAKE_CURRENT_BINARY_DIR}/gdi-upscalers")
+set(GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/generate-anime4k-metal.py")
+set(GLSL "${CMAKE_CURRENT_SOURCE_DIR}/vendor/anime4k/Anime4K_Upscale_CNN_x2_S.glsl")
+add_custom_command(OUTPUT "${RESOURCES}/anime4k.metallib"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${RESOURCES}"
+    COMMAND ${Python3_EXECUTABLE} "${GENERATOR}" --output "${RESOURCES}/anime4k.metal"
+    COMMAND ${XCRUN} -sdk macosx metal -c -std=macos-metal2.3 -mmacosx-version-min=11.0
+            "-fmodules-cache-path=${CMAKE_CURRENT_BINARY_DIR}/metal-module-cache"
+            "${RESOURCES}/anime4k.metal" -o "${RESOURCES}/anime4k.air"
+    COMMAND ${XCRUN} -sdk macosx metal "${RESOURCES}/anime4k.air" -o "${RESOURCES}/anime4k.metallib"
+    DEPENDS "${GENERATOR}" "${GLSL}" VERBATIM)
+add_custom_target(anime4k_shaders ALL DEPENDS "${RESOURCES}/anime4k.metallib")
+set(TEMPORAL_SHADER "${CMAKE_CURRENT_SOURCE_DIR}/shaders/temporal.metal")
+add_custom_command(OUTPUT "${RESOURCES}/temporal.metallib"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${RESOURCES}"
+    COMMAND ${XCRUN} -sdk macosx metal -c -std=macos-metal2.3 -mmacosx-version-min=11.0
+            "-fmodules-cache-path=${CMAKE_CURRENT_BINARY_DIR}/metal-module-cache"
+            "${TEMPORAL_SHADER}" -o "${RESOURCES}/temporal.air"
+    COMMAND ${XCRUN} -sdk macosx metallib "${RESOURCES}/temporal.air"
+            -o "${RESOURCES}/temporal.metallib"
+    DEPENDS "${TEMPORAL_SHADER}" VERBATIM)
+add_custom_target(temporal_shaders ALL DEPENDS "${RESOURCES}/temporal.metallib")
+file(MAKE_DIRECTORY "${RESOURCES}/models-se")
+configure_file("${WGDI_MODEL_DIR}/up2x-no-denoise.param" "${RESOURCES}/models-se/up2x-no-denoise.param" COPYONLY)
+configure_file("${WGDI_MODEL_DIR}/up2x-no-denoise.bin" "${RESOURCES}/models-se/up2x-no-denoise.bin" COPYONLY)
+file(MAKE_DIRECTORY "${RESOURCES}/models-animevideov3")
+configure_file("${WGDI_ESRGAN_MODEL_DIR}/realesr-animevideov3-x2.param" "${RESOURCES}/models-animevideov3/realesr-animevideov3-x2.param" COPYONLY)
+configure_file("${WGDI_ESRGAN_MODEL_DIR}/realesr-animevideov3-x2.bin" "${RESOURCES}/models-animevideov3/realesr-animevideov3-x2.bin" COPYONLY)
+
+add_library(winegdiupscalers SHARED src/api.cpp src/anime4k.mm src/realcugan.cpp src/realesrgan.cpp src/coreml-client.cpp src/resize.mm src/temporal.mm)
+target_include_directories(winegdiupscalers PUBLIC include PRIVATE src)
+target_compile_options(winegdiupscalers PRIVATE -Wall -Wextra -Werror=return-type)
+target_link_libraries(winegdiupscalers PRIVATE ncnn "-framework Foundation" "-framework Metal" "-framework Accelerate" "-framework QuartzCore" "-framework CoreGraphics" "-framework IOSurface")
+set_target_properties(winegdiupscalers PROPERTIES INSTALL_NAME_DIR "@rpath")
+add_dependencies(winegdiupscalers anime4k_shaders temporal_shaders)
+set(WINE_UNIX_DIR "lib/wine/x86_64-unix" CACHE STRING "Wine Unix architecture directory")
+install(TARGETS winegdiupscalers LIBRARY DESTINATION "${WINE_UNIX_DIR}")
+install(FILES "${RESOURCES}/anime4k.metallib" "${RESOURCES}/temporal.metallib" DESTINATION "${WINE_UNIX_DIR}/gdi-upscalers")
+install(DIRECTORY "${RESOURCES}/models-se" DESTINATION "${WINE_UNIX_DIR}/gdi-upscalers")
+install(DIRECTORY "${RESOURCES}/models-animevideov3" DESTINATION "${WINE_UNIX_DIR}/gdi-upscalers")
+# Core ML helper is built separately for arm64 even when Wine is x86_64.
+# A prepared bundle contains the helper, fixed-size compiled models and its
+# provenance manifest. Other dimensions use overlapping fixed-size Core ML tiles.
+set(WGDI_COREML_BUNDLE "" CACHE PATH "Prepared arm64 Core ML resource bundle")
+if(WGDI_COREML_BUNDLE)
+    if(NOT EXISTS "${WGDI_COREML_BUNDLE}/winegdi-coreml-helper" OR
+       NOT EXISTS "${WGDI_COREML_BUNDLE}/coreml/manifest.json")
+        message(FATAL_ERROR "Core ML bundle requires signed helper and model manifest")
+    endif()
+    install(DIRECTORY "${WGDI_COREML_BUNDLE}/" DESTINATION "${WINE_UNIX_DIR}/gdi-upscalers")
+    install(PROGRAMS "${WGDI_COREML_BUNDLE}/winegdi-coreml-helper"
+            DESTINATION "${WINE_UNIX_DIR}/gdi-upscalers")
+endif()
+install(FILES vendor/anime4k/LICENSE DESTINATION "${WINE_UNIX_DIR}/gdi-upscalers/licenses" RENAME Anime4K-MIT.txt)
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../../licenses/RealCUGAN-ncnn-MIT.txt"
+              "${CMAKE_CURRENT_SOURCE_DIR}/../../licenses/RealCUGAN-bilibili-MIT.txt"
+              "${CMAKE_CURRENT_SOURCE_DIR}/../../licenses/Real-ESRGAN-BSD-3-Clause.txt"
+              "${CMAKE_CURRENT_SOURCE_DIR}/../../licenses/ncnn-BSD-3-Clause.txt"
+        DESTINATION "${WINE_UNIX_DIR}/gdi-upscalers/licenses")
+
+if(BUILD_TESTING)
+    add_executable(gdi-upscalers-test tests/api-test.cpp)
+    target_link_libraries(gdi-upscalers-test PRIVATE winegdiupscalers)
+    target_compile_options(gdi-upscalers-test PRIVATE -UNDEBUG)
+    add_test(NAME gdi-upscalers-api-and-realcugan COMMAND gdi-upscalers-test "${RESOURCES}")
+    set_tests_properties(gdi-upscalers-api-and-realcugan PROPERTIES TIMEOUT 90)
+endif()

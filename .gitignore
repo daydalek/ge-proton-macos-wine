@@ -3,3 +3,9 @@
 /autom4te.cache/
 .DS_Store
 *~
+
+# Project build outputs
+/work/
+/outputs/
+__pycache__/
+*.py[cod]
